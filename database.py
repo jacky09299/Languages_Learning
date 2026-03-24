@@ -3,7 +3,8 @@ import datetime
 
 class DatabaseManager:
     def __init__(self, db_name="language_learning.db"):
-        self.conn = sqlite3.connect(db_name)
+        # check_same_thread=False allows background threads (scheduler, sync, email) to use the connection
+        self.conn = sqlite3.connect(db_name, check_same_thread=False)
         self.cursor = self.conn.cursor()
         self.create_tables()
 
@@ -28,9 +29,14 @@ class DatabaseManager:
                 l1_text TEXT NOT NULL,
                 created_date DATE NOT NULL,
                 unlock_date DATE NOT NULL,
-                status TEXT DEFAULT 'locked' -- locked, ready, completed
+                status TEXT DEFAULT 'locked', -- locked, ready, completed
+                l1_user_translation TEXT DEFAULT '',
+                is_synced INTEGER DEFAULT 0
             )
         ''')
+
+        # Upgrade schema if older version
+        self._upgrade_schema()
 
         # 3. Dictogloss
         self.cursor.execute('''
@@ -126,10 +132,27 @@ class DatabaseManager:
         ''', (today,))
         self.conn.commit()
 
+    def _upgrade_schema(self):
+        self.cursor.execute("PRAGMA table_info(translations)")
+        columns = [info[1] for info in self.cursor.fetchall()]
+        if "l1_user_translation" not in columns:
+            self.cursor.execute("ALTER TABLE translations ADD COLUMN l1_user_translation TEXT DEFAULT ''")
+        if "is_synced" not in columns:
+            self.cursor.execute("ALTER TABLE translations ADD COLUMN is_synced INTEGER DEFAULT 0")
+        self.conn.commit()
+
     def get_ready_translations(self):
         self.check_translation_locks()
-        self.cursor.execute("SELECT id, l1_text, l2_text FROM translations WHERE status = 'ready'")
+        self.cursor.execute("SELECT id, l1_text, l2_text, l1_user_translation FROM translations WHERE status = 'ready'")
         return self.cursor.fetchall()
+
+    def update_user_translation(self, translation_id, user_translation):
+        self.cursor.execute('''
+            UPDATE translations
+            SET l1_user_translation = ?, is_synced = 1
+            WHERE id = ? AND is_synced = 0
+        ''', (user_translation, translation_id))
+        self.conn.commit()
 
     def get_locked_translations(self):
         self.cursor.execute("SELECT id, l1_text, unlock_date FROM translations WHERE status = 'locked'")

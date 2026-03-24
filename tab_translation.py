@@ -1,5 +1,8 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
+import threading
+from sheet_fetcher import fetch_and_sync_answers
+from email_sender import send_translation_emails
 
 class TranslationTab(ttk.Frame):
     def __init__(self, parent, db_manager):
@@ -34,13 +37,18 @@ class TranslationTab(ttk.Frame):
         ttk.Button(left_frame, text="儲存並鎖定 (Save & Lock)", command=self.add_translation).pack(pady=10)
 
         # Right side: Review Unlocked Translations
-        ttk.Label(right_frame, text="解鎖可翻譯項目 (Ready to Translate):").pack(anchor="w")
+        top_right_frame = ttk.Frame(right_frame)
+        top_right_frame.pack(fill="x")
+        ttk.Label(top_right_frame, text="解鎖可翻譯項目 (Ready to Translate):").pack(side="left", anchor="w")
+
+        ttk.Button(top_right_frame, text="同步 Gmail 回答 (Sync Answers)", command=self.sync_answers).pack(side="right")
+        ttk.Button(top_right_frame, text="手動寄送信件 (Send Emails)", command=self.send_emails).pack(side="right", padx=5)
 
         self.trans_listbox = tk.Listbox(right_frame, height=10)
         self.trans_listbox.pack(fill="both", expand=True, pady=5)
         self.trans_listbox.bind("<<ListboxSelect>>", self.on_trans_select)
 
-        ttk.Label(right_frame, text="翻譯回外語 (Translate back to L2):").pack(anchor="w", pady=(10, 0))
+        ttk.Label(right_frame, text="已收取信箱回答 / 手動填寫翻譯 (Fetched or Manual Translation):").pack(anchor="w", pady=(10, 0))
         self.trans_back_input = tk.Text(right_frame, height=8, width=40)
         self.trans_back_input.pack(fill="both", expand=True, pady=5)
 
@@ -69,9 +77,31 @@ class TranslationTab(ttk.Frame):
         self.ready_trans = self.db.get_ready_translations()
 
         for trans in self.ready_trans:
-            # trans is (id, l1_text, l2_text)
-            display_text = trans[1][:30] + "..." if len(trans[1]) > 30 else trans[1]
+            # trans is (id, l1_text, l2_text, l1_user_translation)
+            is_synced = "✔️" if trans[3] else "❌"
+            display_text = f"[{trans[0]}] [{is_synced}] {trans[1][:25]}..." if len(trans[1]) > 25 else f"[{trans[0]}] [{is_synced}] {trans[1]}"
             self.trans_listbox.insert(tk.END, display_text)
+
+    def sync_answers(self):
+        def _sync():
+            success = fetch_and_sync_answers(self.db)
+            self.after(0, self.load_translations)
+            if success:
+                self.after(0, lambda: messagebox.showinfo("同步完成", "表單回答同步完成！"))
+            else:
+                self.after(0, lambda: messagebox.showwarning("同步失敗", "同步過程中發生錯誤或沒有新回答。"))
+
+        threading.Thread(target=_sync, daemon=True).start()
+
+    def send_emails(self):
+        def _send():
+            try:
+                send_translation_emails(self.db)
+                self.after(0, lambda: messagebox.showinfo("發送完成", "今日複習信件發送完成！"))
+            except Exception as e:
+                self.after(0, lambda: messagebox.showwarning("發送失敗", f"發送過程中發生錯誤: {str(e)}"))
+
+        threading.Thread(target=_send, daemon=True).start()
 
     def on_trans_select(self, event):
         selection = self.trans_listbox.curselection()
@@ -79,9 +109,14 @@ class TranslationTab(ttk.Frame):
 
         idx = selection[0]
         l1_text = self.ready_trans[idx][1]
+        user_trans = self.ready_trans[idx][3]
 
-        # Display the prompt (L1 text) somewhere, maybe via messagebox or just the listbox is enough,
-        # Let's show it in a messagebox to focus the user
+        # Put user translation in text box if synced, otherwise empty so they can type manually
+        self.trans_back_input.delete("1.0", tk.END)
+        if user_trans:
+            self.trans_back_input.insert("1.0", user_trans)
+
+        # Display the prompt
         messagebox.showinfo("母語提示 (L1 Prompt)", f"請將以下母語翻回外語：\n\n{l1_text}")
 
     def compare_translation(self):

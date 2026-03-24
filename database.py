@@ -18,7 +18,8 @@ class DatabaseManager:
                 next_review_date DATE NOT NULL,
                 interval INTEGER DEFAULT 0,
                 step INTEGER DEFAULT 0,
-                target_language TEXT DEFAULT 'English'
+                target_language TEXT DEFAULT 'English',
+                explanation TEXT DEFAULT ''
             )
         ''')
 
@@ -48,17 +49,6 @@ class DatabaseManager:
             )
         ''')
 
-        # 4. Language Laddering
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS laddering_cards (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                l2_prompt TEXT NOT NULL,
-                l3_target TEXT NOT NULL,
-                notes TEXT,
-                target_language TEXT DEFAULT 'Korean'
-            )
-        ''')
-
         # 5. Dashboard Sessions & Language Rotation
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS language_rotation (
@@ -76,18 +66,18 @@ class DatabaseManager:
         self.conn.commit()
 
     # --- SRS Methods ---
-    def add_srs_item(self, word, sentences="", target_language="English"):
+    def add_srs_item(self, word, sentences="", explanation="", target_language="English"):
         today = datetime.date.today().isoformat()
         self.cursor.execute('''
-            INSERT INTO srs_items (word, sentences, next_review_date, interval, step, target_language)
-            VALUES (?, ?, ?, 0, 0, ?)
-        ''', (word, sentences, today, target_language))
+            INSERT INTO srs_items (word, sentences, explanation, next_review_date, interval, step, target_language)
+            VALUES (?, ?, ?, ?, 0, 0, ?)
+        ''', (word, sentences, explanation, today, target_language))
         self.conn.commit()
 
     def get_due_srs_items(self, target_language="English"):
         today = datetime.date.today().isoformat()
         self.cursor.execute('''
-            SELECT id, word, sentences, step FROM srs_items
+            SELECT id, word, sentences, explanation, step FROM srs_items
             WHERE next_review_date <= ? AND target_language = ?
         ''', (today, target_language))
         return self.cursor.fetchall()
@@ -152,6 +142,8 @@ class DatabaseManager:
         srs_cols = [info[1] for info in self.cursor.fetchall()]
         if "target_language" not in srs_cols:
             self.cursor.execute("ALTER TABLE srs_items ADD COLUMN target_language TEXT DEFAULT 'English'")
+        if "explanation" not in srs_cols:
+            self.cursor.execute("ALTER TABLE srs_items ADD COLUMN explanation TEXT DEFAULT ''")
 
         # Dictogloss
         self.cursor.execute("PRAGMA table_info(dictogloss)")
@@ -159,11 +151,21 @@ class DatabaseManager:
         if "target_language" not in dicto_cols:
             self.cursor.execute("ALTER TABLE dictogloss ADD COLUMN target_language TEXT DEFAULT 'English'")
             
-        # Laddering
-        self.cursor.execute("PRAGMA table_info(laddering_cards)")
-        ladder_cols = [info[1] for info in self.cursor.fetchall()]
-        if "target_language" not in ladder_cols:
-            self.cursor.execute("ALTER TABLE laddering_cards ADD COLUMN target_language TEXT DEFAULT 'Korean'")
+        # Migrate Laddering Cards to SRS
+        self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='laddering_cards'")
+        if self.cursor.fetchone():
+            self.cursor.execute("SELECT l2_prompt, l3_target, notes, target_language FROM laddering_cards")
+            old_cards = self.cursor.fetchall()
+            today = datetime.date.today().isoformat()
+            for l2_prompt, l3_target, notes, target_language in old_cards:
+                explanation = l2_prompt
+                if notes:
+                    explanation += "\\n[Notes] " + notes
+                self.cursor.execute('''
+                    INSERT INTO srs_items (word, sentences, explanation, next_review_date, interval, step, target_language)
+                    VALUES (?, ?, ?, ?, 0, 0, ?)
+                ''', (l3_target, "", explanation, today, target_language))
+            self.cursor.execute("DROP TABLE laddering_cards")
 
         self.conn.commit()
 
@@ -203,18 +205,6 @@ class DatabaseManager:
     def update_dictogloss_text(self, item_id, text):
         self.cursor.execute("UPDATE dictogloss SET reconstructed_text = ? WHERE id = ?", (text, item_id))
         self.conn.commit()
-
-    # --- Laddering Methods ---
-    def add_laddering_card(self, l2_prompt, l3_target, notes="", target_language="Korean"):
-        self.cursor.execute('''
-            INSERT INTO laddering_cards (l2_prompt, l3_target, notes, target_language)
-            VALUES (?, ?, ?, ?)
-        ''', (l2_prompt, l3_target, notes, target_language))
-        self.conn.commit()
-
-    def get_all_laddering_cards(self, target_language="Korean"):
-        self.cursor.execute("SELECT id, l2_prompt, l3_target, notes FROM laddering_cards WHERE target_language = ?", (target_language,))
-        return self.cursor.fetchall()
 
     # --- Language Rotation Methods ---
     def add_language_rotation(self, language, status, months=3):

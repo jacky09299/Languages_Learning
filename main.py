@@ -64,6 +64,7 @@ class LanguageLearningApp(tk.Tk):
     def run_scheduler(self):
         last_sent_date = None
         last_sync_date = None
+        last_srs_sync_hour = -1
 
         while self.scheduler_running:
             now = datetime.datetime.now()
@@ -86,6 +87,16 @@ class LanguageLearningApp(tk.Tk):
                 except Exception as e:
                     print("Error in background sync task:", e)
                 last_sync_date = today_str
+
+            # Every 12 hours: Sync SRS
+            if now.hour % 12 == 0 and now.minute == 0 and last_srs_sync_hour != now.hour:
+                print("Scheduler: Syncing SRS items from Google Sheet...")
+                try:
+                    from sheet_fetcher import fetch_and_sync_srs_items
+                    fetch_and_sync_srs_items(self.db)
+                except Exception as e:
+                    print("Error in background SRS sync task:", e)
+                last_srs_sync_hour = now.hour
 
             time.sleep(30) # Check every 30 seconds
 

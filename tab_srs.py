@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog
 
 class SRSTab(ttk.Frame):
     def __init__(self, parent, db_manager, app):
@@ -29,7 +29,10 @@ class SRSTab(ttk.Frame):
         self.srs_explanation_var = tk.StringVar()
         ttk.Entry(add_frame, textvariable=self.srs_explanation_var, width=40).grid(row=2, column=1, padx=5, pady=5)
 
-        ttk.Button(add_frame, text="新增 (Add)", command=self.add_srs_item).grid(row=3, column=0, columnspan=2, pady=10)
+        btn_add_frame = ttk.Frame(add_frame)
+        btn_add_frame.grid(row=3, column=0, columnspan=2, pady=10)
+        ttk.Button(btn_add_frame, text="新增 (Add)", command=self.add_srs_item).pack(side="left", padx=5)
+        ttk.Button(btn_add_frame, text="從 Google Sheet 同步 (Sync from Google Sheet)", command=self.sync_srs_from_sheet).pack(side="left", padx=5)
 
         # Lower area: Review Due Items
         review_frame = ttk.LabelFrame(self, text="待複習項目 (Due for Review)")
@@ -45,7 +48,12 @@ class SRSTab(ttk.Frame):
 
         ttk.Button(btn_frame, text="記得 (Remembered)", command=lambda: self.review_srs_item(True)).pack(side="left", padx=5, expand=True)
         ttk.Button(btn_frame, text="👁️ 查看解釋與句子 (View Ext.)", command=self.show_explanation).pack(side="left", padx=5, expand=True)
-        ttk.Button(btn_frame, text="忘記 (Forgot)", command=lambda: self.review_srs_item(False)).pack(side="right", padx=5, expand=True)
+        ttk.Button(btn_frame, text="忘記 (Forgot)", command=lambda: self.review_srs_item(False)).pack(side="left", padx=5, expand=True)
+
+        edit_frame = ttk.Frame(review_frame)
+        edit_frame.pack(fill="x", pady=5)
+        ttk.Button(edit_frame, text="修改解釋 (Edit Explanation)", command=self.edit_explanation).pack(side="left", padx=5, expand=True)
+        ttk.Button(edit_frame, text="刪除此項 (Delete Item)", command=self.delete_srs_item).pack(side="right", padx=5, expand=True)
 
     def add_srs_item(self):
         word = self.srs_word_var.get().strip()
@@ -64,6 +72,15 @@ class SRSTab(ttk.Frame):
         self.srs_explanation_var.set("")
         self.load_due_srs_items()
 
+    def sync_srs_from_sheet(self):
+        from sheet_fetcher import fetch_and_sync_srs_items
+        count = fetch_and_sync_srs_items(self.db)
+        if count > 0:
+            messagebox.showinfo("同步結果", f"成功匯入了 {count} 筆單字/句子！\n(Imported {count} items!)")
+            self.load_due_srs_items()
+        else:
+            messagebox.showinfo("同步結果", "目前沒有新的項目需要同步\n(No new items to sync).")
+
     def load_due_srs_items(self):
         self.srs_listbox.delete(0, tk.END)
         current_lang = self.app.get_current_language()
@@ -71,10 +88,45 @@ class SRSTab(ttk.Frame):
 
         for item in self.due_srs_items:
             # item is (id, word, sentences, explanation, step)
-            display_text = f"[{item[4]}] {item[1]}" 
-            if item[2]: # Has sentences
-                display_text += f" - {item[2][:20]}..." if len(item[2]) > 20 else f" - {item[2]}"
+            display_text = f"[{item[4]}]"
+            if item[1]:
+                display_text += f" {item[1]}"
+                if item[2]:
+                    display_text += f" - {item[2][:20]}..." if len(item[2]) > 20 else f" - {item[2]}"
+            else:
+                if item[2]:
+                    display_text += f" {item[2][:40]}..." if len(item[2]) > 40 else f" {item[2]}"
             self.srs_listbox.insert(tk.END, display_text)
+
+    def delete_srs_item(self):
+        selection = self.srs_listbox.curselection()
+        if not selection:
+            messagebox.showwarning("警告", "請選擇要刪除的項目 (Select an item to delete)")
+            return
+        
+        idx = selection[0]
+        item = self.due_srs_items[idx]
+        item_id = item[0]
+        
+        if messagebox.askyesno("確認", "確定要刪除嗎？\n(Are you sure you want to delete?)"):
+            self.db.delete_srs_item(item_id)
+            self.load_due_srs_items()
+
+    def edit_explanation(self):
+        selection = self.srs_listbox.curselection()
+        if not selection:
+            messagebox.showwarning("警告", "請選擇要修改的項目 (Select an item to edit)")
+            return
+            
+        idx = selection[0]
+        item = self.due_srs_items[idx]
+        item_id = item[0]
+        current_exp = item[3]
+        
+        new_exp = simpledialog.askstring("修改解釋", "請輸入新的解釋 (Enter new explanation):", initialvalue=current_exp)
+        if new_exp is not None:
+            self.db.update_srs_explanation(item_id, new_exp)
+            self.load_due_srs_items()
 
     def show_explanation(self):
         selection = self.srs_listbox.curselection()

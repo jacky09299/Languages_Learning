@@ -71,6 +71,67 @@ def fetch_and_sync_answers(db_manager):
         print(f"同步表單回答時發生錯誤 (Error syncing form answers): {e}")
         return False
 
+def fetch_and_sync_srs_items(db_manager):
+    config = load_config()
+    # Default URL if not provided in config
+    csv_url = config.get("GOOGLE_SHEET_SRS_URL", "https://docs.google.com/spreadsheets/d/1MXLBfBRtEDMYDUO3DHlYeG2VTPzySuEyS9U2NOce8dI/export?format=csv")
+
+    try:
+        response = urllib.request.urlopen(csv_url)
+        content = response.read().decode('utf-8')
+
+        csv_reader = csv.reader(io.StringIO(content))
+        header = next(csv_reader, None)
+        if not header:
+            print("SRS CSV 檔案為空 (SRS CSV file is empty).")
+            return 0
+
+        lang_map = {
+            "英文": "English",
+            "韓文": "Korean",
+            "日文": "Japanese",
+            "德文": "German",
+            "泰文": "Thai",
+            "西班牙文": "Spanish"
+        }
+
+        lang_idx, word_idx, sent_idx, expl_idx = -1, -1, -1, -1
+        for i, col in enumerate(header):
+            col = col.strip()
+            if "語言" in col: lang_idx = i
+            elif "單字" in col: word_idx = i
+            elif "句子" in col: sent_idx = i
+            elif "解釋" in col: expl_idx = i
+
+        if -1 in [lang_idx, word_idx]:
+            print("找不到必要的欄位 (Missing required columns in SRS CSV).")
+            return 0
+
+        synced_count = 0
+        for row in csv_reader:
+            if len(row) > max(lang_idx, word_idx, sent_idx, expl_idx):
+                lang_zh = row[lang_idx].strip()
+                word = row[word_idx].strip()
+                sentences = row[sent_idx].strip() if sent_idx != -1 else ""
+                explanation = row[expl_idx].strip() if expl_idx != -1 else ""
+
+                if not word and not sentences:
+                    continue
+
+                target_lang = lang_map.get(lang_zh, "English")
+
+                # Check if exact item exists
+                if not db_manager.srs_item_exists(word, sentences, explanation, target_lang):
+                    db_manager.add_srs_item(word, sentences, explanation, target_lang)
+                    synced_count += 1
+                    
+        print(f"成功同步了 {synced_count} 筆 SRS 項目 (Successfully synced {synced_count} SRS items).")
+        return synced_count
+
+    except Exception as e:
+        print(f"同步 SRS 表單時發生錯誤 (Error syncing SRS form): {e}")
+        return 0
+
 if __name__ == "__main__":
     from database import DatabaseManager
     db = DatabaseManager(":memory:")

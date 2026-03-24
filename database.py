@@ -74,6 +74,13 @@ class DatabaseManager:
         ''', (word, sentences, explanation, today, target_language))
         self.conn.commit()
 
+    def srs_item_exists(self, word, sentences, explanation, target_language):
+        self.cursor.execute('''
+            SELECT 1 FROM srs_items 
+            WHERE word = ? AND sentences = ? AND explanation = ? AND target_language = ?
+        ''', (word, sentences, explanation, target_language))
+        return self.cursor.fetchone() is not None
+
     def get_due_srs_items(self, target_language="English"):
         today = datetime.date.today().isoformat()
         self.cursor.execute('''
@@ -81,6 +88,14 @@ class DatabaseManager:
             WHERE next_review_date <= ? AND target_language = ?
         ''', (today, target_language))
         return self.cursor.fetchall()
+
+    def delete_srs_item(self, item_id):
+        self.cursor.execute("DELETE FROM srs_items WHERE id = ?", (item_id,))
+        self.conn.commit()
+
+    def update_srs_explanation(self, item_id, explanation):
+        self.cursor.execute("UPDATE srs_items SET explanation = ? WHERE id = ?", (explanation, item_id))
+        self.conn.commit()
 
     def update_srs_item(self, item_id, success):
         # Ebbinghaus intervals in days: 1, 2, 4, 7, 15, 30, 60

@@ -1,8 +1,0 @@
-{
-    "SMTP_SERVER": "smtp.gmail.com",
-    "SMTP_PORT": 587,
-    "EMAIL": "@gmail.com",
-    "PASSWORD": "dummy_password_here",
-    "GOOGLE_SHEET_CSV_URL": "https://docs.google.com/spreadsheets/d/1IShtSiPfsWdxw3vH5dgeJ8OqwJ12dTrZYIByuZFYEDY/export?format=csv",
-    "GOOGLE_FORM_BASE_URL": "https://docs.google.com/forms/d/e/1FAIpQLSfCZ5flj2ttI-ivyYlmkWsAM1Hm4tbiPk7e27HFtIRt3xwt_w/viewform?usp=pp_url&entry.557029122="
-}

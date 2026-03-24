@@ -5,10 +5,14 @@ from sheet_fetcher import fetch_and_sync_answers
 from email_sender import send_translation_emails
 
 class TranslationTab(ttk.Frame):
-    def __init__(self, parent, db_manager):
+    def __init__(self, parent, db_manager, app):
         super().__init__(parent)
         self.db = db_manager
+        self.app = app
         self.create_ui()
+        self.load_translations()
+
+    def refresh_data(self):
         self.load_translations()
 
     def create_ui(self):
@@ -66,7 +70,8 @@ class TranslationTab(ttk.Frame):
             messagebox.showwarning("警告", "外語與母語都不能為空 (Texts cannot be empty)")
             return
 
-        self.db.add_translation(l2_text, l1_text, lock_days)
+        current_lang = self.app.get_current_language()
+        self.db.add_translation(l2_text, l1_text, lock_days, target_language=current_lang)
         messagebox.showinfo("成功", "已儲存並鎖定 (Saved and Locked)")
         self.l2_text_input.delete("1.0", tk.END)
         self.l1_text_input.delete("1.0", tk.END)
@@ -74,7 +79,8 @@ class TranslationTab(ttk.Frame):
 
     def load_translations(self):
         self.trans_listbox.delete(0, tk.END)
-        self.ready_trans = self.db.get_ready_translations()
+        current_lang = self.app.get_current_language()
+        self.ready_trans = self.db.get_ready_translations(target_language=current_lang)
 
         for trans in self.ready_trans:
             # trans is (id, l1_text, l2_text, l1_user_translation)

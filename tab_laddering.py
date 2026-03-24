@@ -2,10 +2,14 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 class LadderingTab(ttk.Frame):
-    def __init__(self, parent, db_manager):
+    def __init__(self, parent, db_manager, app):
         super().__init__(parent)
         self.db = db_manager
+        self.app = app
         self.create_ui()
+        self.load_laddering_cards()
+
+    def refresh_data(self):
         self.load_laddering_cards()
 
     def create_ui(self):
@@ -43,7 +47,8 @@ class LadderingTab(ttk.Frame):
             messagebox.showwarning("警告", "L2 提示與 L3 目標都不能為空")
             return
 
-        self.db.add_laddering_card(l2_prompt, l3_target)
+        current_lang = self.app.get_current_language()
+        self.db.add_laddering_card(l2_prompt, l3_target, target_language=current_lang)
         messagebox.showinfo("成功", "已新增卡片 (Card Added)")
         self.l2_prompt_var.set("")
         self.l3_target_var.set("")
@@ -51,7 +56,8 @@ class LadderingTab(ttk.Frame):
 
     def load_laddering_cards(self):
         self.ladder_listbox.delete(0, tk.END)
-        self.ladder_cards = self.db.get_all_laddering_cards()
+        current_lang = self.app.get_current_language()
+        self.ladder_cards = self.db.get_all_laddering_cards(target_language=current_lang)
 
         for card in self.ladder_cards:
             # Show L2 prompt ONLY in the list to enforce L2 thinking

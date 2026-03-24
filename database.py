@@ -17,7 +17,8 @@ class DatabaseManager:
                 sentences TEXT,
                 next_review_date DATE NOT NULL,
                 interval INTEGER DEFAULT 0,
-                step INTEGER DEFAULT 0
+                step INTEGER DEFAULT 0,
+                target_language TEXT DEFAULT 'English'
             )
         ''')
 
@@ -31,12 +32,10 @@ class DatabaseManager:
                 unlock_date DATE NOT NULL,
                 status TEXT DEFAULT 'locked', -- locked, ready, completed
                 l1_user_translation TEXT DEFAULT '',
-                is_synced INTEGER DEFAULT 0
+                is_synced INTEGER DEFAULT 0,
+                target_language TEXT DEFAULT 'English'
             )
         ''')
-
-        # Upgrade schema if older version
-        self._upgrade_schema()
 
         # 3. Dictogloss
         self.cursor.execute('''
@@ -44,7 +43,8 @@ class DatabaseManager:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
                 audio_path TEXT NOT NULL,
-                reconstructed_text TEXT
+                reconstructed_text TEXT,
+                target_language TEXT DEFAULT 'English'
             )
         ''')
 
@@ -54,7 +54,8 @@ class DatabaseManager:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 l2_prompt TEXT NOT NULL,
                 l3_target TEXT NOT NULL,
-                notes TEXT
+                notes TEXT,
+                target_language TEXT DEFAULT 'Korean'
             )
         ''')
 
@@ -69,23 +70,26 @@ class DatabaseManager:
             )
         ''')
 
+        # Upgrade schema if older version
+        self._upgrade_schema()
+
         self.conn.commit()
 
     # --- SRS Methods ---
-    def add_srs_item(self, word, sentences=""):
+    def add_srs_item(self, word, sentences="", target_language="English"):
         today = datetime.date.today().isoformat()
         self.cursor.execute('''
-            INSERT INTO srs_items (word, sentences, next_review_date, interval, step)
-            VALUES (?, ?, ?, 0, 0)
-        ''', (word, sentences, today))
+            INSERT INTO srs_items (word, sentences, next_review_date, interval, step, target_language)
+            VALUES (?, ?, ?, 0, 0, ?)
+        ''', (word, sentences, today, target_language))
         self.conn.commit()
 
-    def get_due_srs_items(self):
+    def get_due_srs_items(self, target_language="English"):
         today = datetime.date.today().isoformat()
         self.cursor.execute('''
             SELECT id, word, sentences, step FROM srs_items
-            WHERE next_review_date <= ?
-        ''', (today,))
+            WHERE next_review_date <= ? AND target_language = ?
+        ''', (today, target_language))
         return self.cursor.fetchall()
 
     def update_srs_item(self, item_id, success):
@@ -114,13 +118,13 @@ class DatabaseManager:
         self.conn.commit()
 
     # --- Translation Methods ---
-    def add_translation(self, l2_text, l1_text, lock_days=3):
+    def add_translation(self, l2_text, l1_text, lock_days=3, target_language="English"):
         today = datetime.date.today()
         unlock_date = (today + datetime.timedelta(days=lock_days)).isoformat()
         self.cursor.execute('''
-            INSERT INTO translations (l2_text, l1_text, created_date, unlock_date, status)
-            VALUES (?, ?, ?, ?, 'locked')
-        ''', (l2_text, l1_text, today.isoformat(), unlock_date))
+            INSERT INTO translations (l2_text, l1_text, created_date, unlock_date, status, target_language)
+            VALUES (?, ?, ?, ?, 'locked', ?)
+        ''', (l2_text, l1_text, today.isoformat(), unlock_date, target_language))
         self.conn.commit()
 
     def check_translation_locks(self):
@@ -133,17 +137,39 @@ class DatabaseManager:
         self.conn.commit()
 
     def _upgrade_schema(self):
+        # Translations
         self.cursor.execute("PRAGMA table_info(translations)")
         columns = [info[1] for info in self.cursor.fetchall()]
         if "l1_user_translation" not in columns:
             self.cursor.execute("ALTER TABLE translations ADD COLUMN l1_user_translation TEXT DEFAULT ''")
         if "is_synced" not in columns:
             self.cursor.execute("ALTER TABLE translations ADD COLUMN is_synced INTEGER DEFAULT 0")
+        if "target_language" not in columns:
+            self.cursor.execute("ALTER TABLE translations ADD COLUMN target_language TEXT DEFAULT 'English'")
+            
+        # SRS Items
+        self.cursor.execute("PRAGMA table_info(srs_items)")
+        srs_cols = [info[1] for info in self.cursor.fetchall()]
+        if "target_language" not in srs_cols:
+            self.cursor.execute("ALTER TABLE srs_items ADD COLUMN target_language TEXT DEFAULT 'English'")
+
+        # Dictogloss
+        self.cursor.execute("PRAGMA table_info(dictogloss)")
+        dicto_cols = [info[1] for info in self.cursor.fetchall()]
+        if "target_language" not in dicto_cols:
+            self.cursor.execute("ALTER TABLE dictogloss ADD COLUMN target_language TEXT DEFAULT 'English'")
+            
+        # Laddering
+        self.cursor.execute("PRAGMA table_info(laddering_cards)")
+        ladder_cols = [info[1] for info in self.cursor.fetchall()]
+        if "target_language" not in ladder_cols:
+            self.cursor.execute("ALTER TABLE laddering_cards ADD COLUMN target_language TEXT DEFAULT 'Korean'")
+
         self.conn.commit()
 
-    def get_ready_translations(self):
+    def get_ready_translations(self, target_language="English"):
         self.check_translation_locks()
-        self.cursor.execute("SELECT id, l1_text, l2_text, l1_user_translation FROM translations WHERE status = 'ready'")
+        self.cursor.execute("SELECT id, l1_text, l2_text, l1_user_translation FROM translations WHERE status = 'ready' AND target_language = ?", (target_language,))
         return self.cursor.fetchall()
 
     def update_user_translation(self, translation_id, user_translation):
@@ -154,8 +180,8 @@ class DatabaseManager:
         ''', (user_translation, translation_id))
         self.conn.commit()
 
-    def get_locked_translations(self):
-        self.cursor.execute("SELECT id, l1_text, unlock_date FROM translations WHERE status = 'locked'")
+    def get_locked_translations(self, target_language="English"):
+        self.cursor.execute("SELECT id, l1_text, unlock_date FROM translations WHERE status = 'locked' AND target_language = ?", (target_language,))
         return self.cursor.fetchall()
 
     def complete_translation(self, translation_id):
@@ -163,15 +189,15 @@ class DatabaseManager:
         self.conn.commit()
 
     # --- Dictogloss Methods ---
-    def add_dictogloss(self, title, audio_path, text=""):
+    def add_dictogloss(self, title, audio_path, text="", target_language="English"):
         self.cursor.execute('''
-            INSERT INTO dictogloss (title, audio_path, reconstructed_text)
-            VALUES (?, ?, ?)
-        ''', (title, audio_path, text))
+            INSERT INTO dictogloss (title, audio_path, reconstructed_text, target_language)
+            VALUES (?, ?, ?, ?)
+        ''', (title, audio_path, text, target_language))
         self.conn.commit()
 
-    def get_all_dictogloss(self):
-        self.cursor.execute("SELECT id, title, audio_path, reconstructed_text FROM dictogloss")
+    def get_all_dictogloss(self, target_language="English"):
+        self.cursor.execute("SELECT id, title, audio_path, reconstructed_text FROM dictogloss WHERE target_language = ?", (target_language,))
         return self.cursor.fetchall()
 
     def update_dictogloss_text(self, item_id, text):
@@ -179,15 +205,15 @@ class DatabaseManager:
         self.conn.commit()
 
     # --- Laddering Methods ---
-    def add_laddering_card(self, l2_prompt, l3_target, notes=""):
+    def add_laddering_card(self, l2_prompt, l3_target, notes="", target_language="Korean"):
         self.cursor.execute('''
-            INSERT INTO laddering_cards (l2_prompt, l3_target, notes)
-            VALUES (?, ?, ?)
-        ''', (l2_prompt, l3_target, notes))
+            INSERT INTO laddering_cards (l2_prompt, l3_target, notes, target_language)
+            VALUES (?, ?, ?, ?)
+        ''', (l2_prompt, l3_target, notes, target_language))
         self.conn.commit()
 
-    def get_all_laddering_cards(self):
-        self.cursor.execute("SELECT id, l2_prompt, l3_target, notes FROM laddering_cards")
+    def get_all_laddering_cards(self, target_language="Korean"):
+        self.cursor.execute("SELECT id, l2_prompt, l3_target, notes FROM laddering_cards WHERE target_language = ?", (target_language,))
         return self.cursor.fetchall()
 
     # --- Language Rotation Methods ---

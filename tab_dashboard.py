@@ -2,9 +2,10 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 class DashboardTab(ttk.Frame):
-    def __init__(self, parent, db_manager):
+    def __init__(self, parent, db_manager, app):
         super().__init__(parent)
         self.db = db_manager
+        self.app = app
 
         # Timer state initialization
         self.current_phase = 0
@@ -17,6 +18,9 @@ class DashboardTab(ttk.Frame):
         self.timer_running = False
 
         self.create_ui()
+        self.load_rotations()
+
+    def refresh_data(self):
         self.load_rotations()
 
     def create_ui(self):

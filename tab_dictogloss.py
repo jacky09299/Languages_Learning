@@ -12,8 +12,12 @@ class DictoglossTab(ttk.Frame):
         super().__init__(parent)
         self.db = db_manager
         self.root_window = root_window
+        self.app = root_window
         self.create_ui()
         self.init_audio()
+        self.load_dictogloss_history()
+
+    def refresh_data(self):
         self.load_dictogloss_history()
 
     def create_ui(self):
@@ -69,7 +73,8 @@ class DictoglossTab(ttk.Frame):
 
     def load_dictogloss_history(self):
         self.dicto_listbox.delete(0, tk.END)
-        self.dicto_history = self.db.get_all_dictogloss()
+        current_lang = self.app.get_current_language()
+        self.dicto_history = self.db.get_all_dictogloss(target_language=current_lang)
         for item in self.dicto_history:
             # id, title, audio_path, text
             display_text = f"[{item[1]}] {item[2]}"
@@ -135,7 +140,8 @@ class DictoglossTab(ttk.Frame):
             messagebox.showwarning("警告", "請先載入音檔 (Please load an audio file)")
             return
 
-        self.db.add_dictogloss("Audio Lesson", audio_path, text)
+        current_lang = self.app.get_current_language()
+        self.db.add_dictogloss("Audio Lesson", audio_path, text, target_language=current_lang)
         messagebox.showinfo("成功", "已儲存重構文本 (Saved)")
         self.load_dictogloss_history()
 

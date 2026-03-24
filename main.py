@@ -21,21 +21,49 @@ class LanguageLearningApp(tk.Tk):
         # Initialize Database
         self.db = DatabaseManager()
 
+        # Add language selector at the top
+        top_frame = ttk.Frame(self)
+        top_frame.pack(fill="x", padx=10, pady=5)
+        ttk.Label(top_frame, text="目前學習語言 (Current Language):", font=("Helvetica", 10, "bold")).pack(side="left")
+        
+        self.current_language_var = tk.StringVar(value="English")
+        self.language_cb = ttk.Combobox(top_frame, textvariable=self.current_language_var, values=["English", "Korean", "Japanese", "Spanish", "French", "German"], state="normal")
+        self.language_cb.pack(side="left", padx=5)
+        self.language_cb.bind("<<ComboboxSelected>>", self.on_language_change)
+        self.language_cb.bind("<Return>", self.on_language_change)
+
         # Setup Notebook (Tabs)
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(expand=True, fill="both")
 
-        # Add Tabs
-        self.notebook.add(SRSTab(self.notebook, self.db), text="SRS 間隔重複")
-        self.notebook.add(TranslationTab(self.notebook, self.db), text="雙向翻譯")
-        self.notebook.add(DictoglossTab(self.notebook, self.db, self), text="聽寫重構")
-        self.notebook.add(LadderingTab(self.notebook, self.db), text="語言階梯法")
-        self.notebook.add(DashboardTab(self.notebook, self.db), text="15/30/15 儀表板")
+        # Add Tabs - Pass self (app) to tabs so they can access current_language
+        self.srs_tab = SRSTab(self.notebook, self.db, self)
+        self.translation_tab = TranslationTab(self.notebook, self.db, self)
+        self.dictogloss_tab = DictoglossTab(self.notebook, self.db, self)
+        self.laddering_tab = LadderingTab(self.notebook, self.db, self)
+        self.dashboard_tab = DashboardTab(self.notebook, self.db, self)
+
+        self.notebook.add(self.srs_tab, text="SRS 間隔重複")
+        self.notebook.add(self.translation_tab, text="雙向翻譯")
+        self.notebook.add(self.dictogloss_tab, text="聽寫重構")
+        self.notebook.add(self.laddering_tab, text="語言階梯法")
+        self.notebook.add(self.dashboard_tab, text="15/30/15 儀表板")
 
         # Start Background scheduler thread
         self.scheduler_running = True
         self.schedule_thread = threading.Thread(target=self.run_scheduler, daemon=True)
         self.schedule_thread.start()
+
+    def get_current_language(self):
+        return self.current_language_var.get().strip() or "English"
+
+    def on_language_change(self, event=None):
+        # Refresh all tabs data when language changes
+        self.srs_tab.refresh_data()
+        self.translation_tab.refresh_data()
+        self.dictogloss_tab.refresh_data()
+        self.laddering_tab.refresh_data()
+        self.dashboard_tab.refresh_data()
 
     def run_scheduler(self):
         last_sent_date = None

@@ -2,10 +2,14 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 class SRSTab(ttk.Frame):
-    def __init__(self, parent, db_manager):
+    def __init__(self, parent, db_manager, app):
         super().__init__(parent)
         self.db = db_manager
+        self.app = app
         self.create_ui()
+        self.load_due_srs_items()
+
+    def refresh_data(self):
         self.load_due_srs_items()
 
     def create_ui(self):
@@ -46,7 +50,8 @@ class SRSTab(ttk.Frame):
             messagebox.showwarning("警告", "單字不能為空 (Word cannot be empty)")
             return
 
-        self.db.add_srs_item(word, sentences)
+        current_lang = self.app.get_current_language()
+        self.db.add_srs_item(word, sentences, target_language=current_lang)
         messagebox.showinfo("成功", "新增成功 (Successfully added)")
         self.srs_word_var.set("")
         self.srs_sentence_var.set("")
@@ -54,7 +59,8 @@ class SRSTab(ttk.Frame):
 
     def load_due_srs_items(self):
         self.srs_listbox.delete(0, tk.END)
-        self.due_srs_items = self.db.get_due_srs_items()
+        current_lang = self.app.get_current_language()
+        self.due_srs_items = self.db.get_due_srs_items(target_language=current_lang)
 
         for item in self.due_srs_items:
             # item is (id, word, sentences, step)

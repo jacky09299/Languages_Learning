@@ -10,6 +10,7 @@ import time
 import datetime
 from email_sender import send_translation_emails
 from sheet_fetcher import fetch_and_sync_answers
+from db_viewer import DatabaseViewer
 
 class LanguageLearningApp(tk.Tk):
     def __init__(self):
@@ -31,6 +32,9 @@ class LanguageLearningApp(tk.Tk):
         self.language_cb.bind("<<ComboboxSelected>>", self.on_language_change)
         self.language_cb.bind("<Return>", self.on_language_change)
 
+        # DB Viewer Button
+        ttk.Button(top_frame, text="查看資料庫 (View DB)", command=self.open_db_viewer).pack(side="right", padx=5)
+
         # Setup Notebook (Tabs)
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(expand=True, fill="both")
@@ -50,6 +54,10 @@ class LanguageLearningApp(tk.Tk):
         self.scheduler_running = True
         self.schedule_thread = threading.Thread(target=self.run_scheduler, daemon=True)
         self.schedule_thread.start()
+
+    def open_db_viewer(self):
+        # Open DB Viewer Toplevel window
+        DatabaseViewer(self, self.db)
 
     def get_current_language(self):
         return self.current_language_var.get().strip() or "English"

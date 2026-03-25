@@ -52,7 +52,12 @@ class TranslationTab(ttk.Frame):
         self.trans_listbox.pack(fill="both", expand=True, pady=5)
         self.trans_listbox.bind("<<ListboxSelect>>", self.on_trans_select)
 
-        ttk.Label(right_frame, text="已收取信箱回答 / 手動填寫翻譯 (Fetched or Manual Translation):").pack(anchor="w", pady=(10, 0))
+        ttk.Label(right_frame, text="母語提示 (L1 Prompt) - 請翻回外語:").pack(anchor="w", pady=(5, 0))
+        self.l1_prompt_display = tk.Text(right_frame, height=4, width=40)
+        self.l1_prompt_display.pack(fill="both", expand=True, pady=(2, 5))
+        self.l1_prompt_display.config(state="disabled")
+
+        ttk.Label(right_frame, text="已收取信箱回答 / 手動填寫翻譯 (Fetched or Manual Translation):").pack(anchor="w", pady=(5, 0))
         self.trans_back_input = tk.Text(right_frame, height=8, width=40)
         self.trans_back_input.pack(fill="both", expand=True, pady=5)
 
@@ -72,7 +77,6 @@ class TranslationTab(ttk.Frame):
 
         current_lang = self.app.get_current_language()
         self.db.add_translation(l2_text, l1_text, lock_days, target_language=current_lang)
-        messagebox.showinfo("成功", "已儲存並鎖定 (Saved and Locked)")
         self.l2_text_input.delete("1.0", tk.END)
         self.l1_text_input.delete("1.0", tk.END)
         self.load_translations()
@@ -93,7 +97,7 @@ class TranslationTab(ttk.Frame):
             success = fetch_and_sync_answers(self.db)
             self.after(0, self.load_translations)
             if success:
-                self.after(0, lambda: messagebox.showinfo("同步完成", "表單回答同步完成！"))
+                pass
             else:
                 self.after(0, lambda: messagebox.showwarning("同步失敗", "同步過程中發生錯誤或沒有新回答。"))
 
@@ -103,7 +107,6 @@ class TranslationTab(ttk.Frame):
         def _send():
             try:
                 send_translation_emails(self.db)
-                self.after(0, lambda: messagebox.showinfo("發送完成", "今日複習信件發送完成！"))
             except Exception as e:
                 self.after(0, lambda: messagebox.showwarning("發送失敗", f"發送過程中發生錯誤: {str(e)}"))
 
@@ -117,13 +120,16 @@ class TranslationTab(ttk.Frame):
         l1_text = self.ready_trans[idx][1]
         user_trans = self.ready_trans[idx][3]
 
+        # Display the L1 Prompt in the new text box
+        self.l1_prompt_display.config(state="normal")
+        self.l1_prompt_display.delete("1.0", tk.END)
+        self.l1_prompt_display.insert("1.0", l1_text)
+        self.l1_prompt_display.config(state="disabled")
+
         # Put user translation in text box if synced, otherwise empty so they can type manually
         self.trans_back_input.delete("1.0", tk.END)
         if user_trans:
             self.trans_back_input.insert("1.0", user_trans)
-
-        # Display the prompt
-        messagebox.showinfo("母語提示 (L1 Prompt)", f"請將以下母語翻回外語：\n\n{l1_text}")
 
     def compare_translation(self):
         selection = self.trans_listbox.curselection()
@@ -132,19 +138,43 @@ class TranslationTab(ttk.Frame):
             return
 
         idx = selection[0]
+        l1_text_intermediate = self.ready_trans[idx][1]
         l2_text_original = self.ready_trans[idx][2]
         l2_text_user = self.trans_back_input.get("1.0", tk.END).strip()
 
-        # For simplicity, we just show both in a message box to let the user manual-AI verify
-        msg = f"【你的翻譯 Your Translation】\n{l2_text_user}\n\n【原始外語 Original L2】\n{l2_text_original}\n\n(將此對比貼給 AI 進行深度分析 / Paste this to AI for analysis)"
+        msg = (
+            "這是一個「雙向翻譯」練習：我先把原文翻譯成母語，幾天後再翻回原文。\n\n"
+            "目的是找出我「能理解但無法正確表達」的地方，以及語言能力的落差。\n\n"
+            "請幫我分析我的翻譯過程：\n\n"
+            "1. 比較原文與我翻回來的句子\n"
+            "2. 指出錯誤與不自然之處\n"
+            "3. 分析這些錯誤是否來自「中間翻譯」\n"
+            "4. 告訴我哪些是母語干擾造成的\n"
+            "5. 提供最接近原文的正確版本\n"
+            "6. 教我應該怎麼避免這類錯誤\n"
+            "7. 請幫我分類這些錯誤（例如：搭配錯誤 / 文法錯誤 / 語氣問題 / 母語直譯）\n\n\n"
+            "【原文】\n"
+            f"{l2_text_original}\n\n"
+            "【我的翻譯（中間語言）】\n"
+            f"{l1_text_intermediate}\n\n"
+            "【我翻回來的句子】\n"
+            f"{l2_text_user}"
+        )
 
         # We can use a Toplevel window for better reading
         top = tk.Toplevel(self)
         top.title("對比結果 (Comparison)")
-        text = tk.Text(top, height=20, width=60)
-        text.pack(padx=10, pady=10)
+        text = tk.Text(top, height=30, width=90)
+        text.pack(padx=10, pady=(10, 5))
         text.insert("1.0", msg)
         text.config(state="disabled")
+
+        def copy_to_clipboard():
+            top.clipboard_clear()
+            top.clipboard_append(msg)
+            top.destroy()
+
+        ttk.Button(top, text="複製全部 (Copy All)", command=copy_to_clipboard).pack(pady=(0, 10))
 
     def complete_translation(self):
         selection = self.trans_listbox.curselection()
@@ -156,4 +186,3 @@ class TranslationTab(ttk.Frame):
         self.db.complete_translation(trans_id)
         self.trans_back_input.delete("1.0", tk.END)
         self.load_translations()
-        messagebox.showinfo("成功", "已完成 (Completed)")

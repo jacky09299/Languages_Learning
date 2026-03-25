@@ -38,33 +38,26 @@ def send_translation_emails(db_manager):
         server.starttls()
         server.login(email_acc, password)
 
+        msg = MIMEMultipart()
+        msg['From'] = email_acc
+        msg['To'] = email_acc
+        msg['Subject'] = f"今日雙向翻譯複習 (共 {len(translations_to_send)} 題)"
+
+        body_lines = ["今日雙向翻譯複習：\n"]
         for trans in translations_to_send:
-            # trans is (id, l1_text, l2_text, l1_user_translation)
             trans_id = trans[0]
             l1_text = trans[1]
-
             form_url = f"{form_base_url}{trans_id}"
 
-            msg = MIMEMultipart()
-            msg['From'] = email_acc
-            msg['To'] = email_acc
-            msg['Subject'] = f"翻譯複習題 #{trans_id}"
+            body_lines.append(f"{l1_text}")
+            body_lines.append(f"{form_url}\n")
 
-            body = f"""
-今日雙向翻譯複習：
-
-請將以下母語翻回外語：
-{l1_text}
-
-請點擊下方連結作答（已自動帶入 Question_id）：
-{form_url}
-"""
-            msg.attach(MIMEText(body, 'plain', 'utf-8'))
-            server.send_message(msg)
-            print(f"已發送 Email 給項目 ID: {trans_id}")
+        body = "\n".join(body_lines)
+        msg.attach(MIMEText(body, 'plain', 'utf-8'))
+        server.send_message(msg)
+        print("已成功發送合併的複習 Email。")
 
         server.quit()
-        print("所有待複習翻譯已發送完畢。")
 
     except Exception as e:
         print(f"發送 Email 時發生錯誤 (Error sending email): {e}")

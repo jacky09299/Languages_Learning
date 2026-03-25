@@ -207,3 +207,7 @@ marimo/_lsp/
 __marimo__/
 language_learning.db
 config.json
+.mp3
+.wav
+.mp4
+.mov

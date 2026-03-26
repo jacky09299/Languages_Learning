@@ -211,3 +211,4 @@ config.json
 .wav
 .mp4
 .mov
+*.db

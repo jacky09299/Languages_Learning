@@ -8,7 +8,7 @@ from tab_dashboard import DashboardTab
 import threading
 import time
 import datetime
-from email_sender import send_translation_emails
+from email_sender import send_translation_emails, send_addition_reminder
 from sheet_fetcher import fetch_and_sync_answers
 from db_viewer import DatabaseViewer
 
@@ -83,6 +83,7 @@ class LanguageLearningApp(tk.Tk):
                 print("Scheduler: Sending daily translation emails at 08:00 AM...")
                 try:
                     send_translation_emails(self.db)
+                    send_addition_reminder(self.db)
                 except Exception as e:
                     print("Error in background email task:", e)
                 last_sent_date = today_str

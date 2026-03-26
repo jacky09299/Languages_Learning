@@ -60,6 +60,16 @@ class DatabaseManager:
             )
         ''')
 
+        # 6. Daily Resources (Jokes/Stories & Encouragements)
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS daily_resources (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category TEXT NOT NULL, -- joke, encouragement
+                content TEXT NOT NULL,
+                is_used INTEGER DEFAULT 0
+            )
+        ''')
+
         # Upgrade schema if older version
         self._upgrade_schema()
 
@@ -245,6 +255,33 @@ class DatabaseManager:
             WHERE start_date <= ? AND end_date >= ?
         ''', (today, today))
         return self.cursor.fetchall()
+
+    # --- Daily Resources Methods ---
+    def add_daily_resource(self, category, content):
+        self.cursor.execute('''
+            INSERT INTO daily_resources (category, content, is_used)
+            VALUES (?, ?, 0)
+        ''', (category, content))
+        self.conn.commit()
+
+    def get_unused_resource(self, category):
+        """Fetch one random resource, delete it from the database, and return its content."""
+        self.cursor.execute('''
+            SELECT id, content FROM daily_resources 
+            WHERE category = ? 
+            ORDER BY RANDOM() LIMIT 1
+        ''', (category,))
+        result = self.cursor.fetchone()
+        if result:
+            res_id, content = result
+            self.cursor.execute('DELETE FROM daily_resources WHERE id = ?', (res_id,))
+            self.conn.commit()
+            return content
+        return None
+
+    def has_any_resources(self):
+        self.cursor.execute('SELECT COUNT(*) FROM daily_resources')
+        return self.cursor.fetchone()[0] > 0
 
     def close(self):
         self.conn.close()

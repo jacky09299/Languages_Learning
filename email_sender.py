@@ -3,6 +3,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import json
 import os
+import random
 
 def load_config(config_path="config.json"):
     if os.path.exists(config_path):
@@ -74,8 +75,13 @@ def send_addition_reminder(db_manager):
         print("未設定有效的 Email 或密碼，跳過發信 (Email/Password not configured).")
         return
 
-    joke = db_manager.get_unused_resource("joke")
-    encouragement = db_manager.get_unused_resource("encouragement")
+    # Select language based on 4:1:0 ratio (Chinese:English:Korean)
+    languages = ["Chinese", "English", "Korean"]
+    weights = [4, 1, 0]
+    selected_lang = random.choices(languages, weights=weights, k=1)[0]
+    
+    joke = db_manager.get_unused_resource("joke", language=selected_lang)
+    encouragement = db_manager.get_unused_resource("encouragement", language=selected_lang)
 
     if not joke and not encouragement:
         print("資料庫中沒有可用的笑話或鼓勵的話，不發送提醒。")

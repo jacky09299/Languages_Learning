@@ -42,10 +42,10 @@ def seed_resources():
     ]
     
     for s in stories:
-        db.add_daily_resource("joke", s.strip())
+        db.add_daily_resource("joke", s.strip(), language='Chinese')
     
     for e in encouragements:
-        db.add_daily_resource("encouragement", e.strip())
+        db.add_daily_resource("encouragement", e.strip(), language='Chinese')
     
     print(f"成功新增了 {len(stories)} 個故事和 {len(encouragements)} 段鼓勵的話。")
     db.close()

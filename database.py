@@ -66,7 +66,8 @@ class DatabaseManager:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 category TEXT NOT NULL, -- joke, encouragement
                 content TEXT NOT NULL,
-                is_used INTEGER DEFAULT 0
+                is_used INTEGER DEFAULT 0,
+                language TEXT DEFAULT 'Chinese'
             )
         ''')
 
@@ -192,12 +193,20 @@ class DatabaseManager:
             for l2_prompt, l3_target, notes, target_language in old_cards:
                 explanation = l2_prompt
                 if notes:
-                    explanation += "\\n[Notes] " + notes
+                    explanation += "\n[Notes] " + notes
                 self.cursor.execute('''
                     INSERT INTO srs_items (word, sentences, explanation, next_review_date, interval, step, target_language)
                     VALUES (?, ?, ?, ?, 0, 0, ?)
                 ''', (l3_target, "", explanation, today, target_language))
             self.cursor.execute("DROP TABLE laddering_cards")
+
+        # Daily Resources
+        self.cursor.execute("PRAGMA table_info(daily_resources)")
+        res_cols = [info[1] for info in self.cursor.fetchall()]
+        if "language" not in res_cols:
+            self.cursor.execute("ALTER TABLE daily_resources ADD COLUMN language TEXT DEFAULT 'Chinese'")
+            # Ensure all existing items are marked as 'Chinese'
+            self.cursor.execute("UPDATE daily_resources SET language = 'Chinese'")
 
         self.conn.commit()
 
@@ -257,20 +266,28 @@ class DatabaseManager:
         return self.cursor.fetchall()
 
     # --- Daily Resources Methods ---
-    def add_daily_resource(self, category, content):
+    def add_daily_resource(self, category, content, language='Chinese'):
         self.cursor.execute('''
-            INSERT INTO daily_resources (category, content, is_used)
-            VALUES (?, ?, 0)
-        ''', (category, content))
+            INSERT INTO daily_resources (category, content, is_used, language)
+            VALUES (?, ?, 0, ?)
+        ''', (category, content, language))
         self.conn.commit()
 
-    def get_unused_resource(self, category):
+    def get_unused_resource(self, category, language=None):
         """Fetch one random resource, delete it from the database, and return its content."""
-        self.cursor.execute('''
-            SELECT id, content FROM daily_resources 
-            WHERE category = ? 
-            ORDER BY RANDOM() LIMIT 1
-        ''', (category,))
+        if language:
+            self.cursor.execute('''
+                SELECT id, content FROM daily_resources 
+                WHERE category = ? AND language = ?
+                ORDER BY RANDOM() LIMIT 1
+            ''', (category, language))
+        else:
+            self.cursor.execute('''
+                SELECT id, content FROM daily_resources 
+                WHERE category = ? 
+                ORDER BY RANDOM() LIMIT 1
+            ''', (category,))
+            
         result = self.cursor.fetchone()
         if result:
             res_id, content = result

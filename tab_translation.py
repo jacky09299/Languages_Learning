@@ -94,7 +94,8 @@ class TranslationTab(ttk.Frame):
 
     def sync_answers(self):
         def _sync():
-            success = fetch_and_sync_answers(self.db)
+            current_lang = self.app.get_current_language()
+            success = fetch_and_sync_answers(self.db, current_lang)
             self.after(0, self.load_translations)
             if success:
                 pass

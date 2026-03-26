@@ -10,7 +10,7 @@ def load_config(config_path="config.json"):
             return json.load(f)
     return {}
 
-def fetch_and_sync_answers(db_manager):
+def fetch_and_sync_answers(db_manager, default_lang="English"):
     config = load_config()
     csv_url = config.get("GOOGLE_SHEET_CSV_URL", "")
 
@@ -30,41 +30,70 @@ def fetch_and_sync_answers(db_manager):
             print("CSV 檔案為空 (CSV file is empty).")
             return False
 
-        # Find indexes. Header should contain 'Question_id' and '翻譯回原文' or similar based on columns.
-        # Let's dynamically find based on some keywords or just assume specific columns if it's simpler.
-        # Typically Google Form CSV headers: Timestamp, Question_id, 翻譯回原文
+        # Find indexes
         q_id_idx = -1
-        ans_idx = -1
+        orig_idx = -1
+        trans_idx = -1
+        lang_idx = -1
 
         for i, col_name in enumerate(header):
-            if "Question_id" in col_name or "question" in col_name.lower():
+            col_lower = col_name.lower()
+            if "question_id" in col_lower or "題目編號" in col_name:
                 q_id_idx = i
-            elif "翻譯" in col_name or "answer" in col_name.lower() or "原文" in col_name:
-                ans_idx = i
+            elif "原文" in col_name or "original" in col_lower:
+                orig_idx = i
+            elif "翻譯" in col_name or "translation" in col_lower:
+                trans_idx = i
+            elif "語言" in col_name or "language" in col_lower:
+                lang_idx = i
 
         # Fallback if names are different
-        if q_id_idx == -1 and len(header) >= 2:
-            q_id_idx = 1
-        if ans_idx == -1 and len(header) >= 3:
-            ans_idx = 2
+        if q_id_idx == -1 and len(header) >= 1: q_id_idx = 0
+        if orig_idx == -1 and len(header) >= 2: orig_idx = 1
+        if trans_idx == -1 and len(header) >= 3: trans_idx = 2
 
-        if q_id_idx == -1 or ans_idx == -1:
+        if q_id_idx == -1 or orig_idx == -1:
             print("找不到對應的欄位標題 (Cannot find matching column headers in CSV).")
             return False
 
         synced_count = 0
+        new_task_count = 0
+        
+        lang_map = {
+            "英文": "English", "韓文": "Korean", "日文": "Japanese",
+            "德文": "German", "泰文": "Thai", "西班牙文": "Spanish"
+        }
+
         for row in csv_reader:
-            if len(row) > max(q_id_idx, ans_idx):
-                q_id_str = row[q_id_idx].strip()
-                answer = row[ans_idx].strip()
+            if len(row) <= max(q_id_idx, orig_idx):
+                continue
+                
+            q_id_str = row[q_id_idx].strip() if q_id_idx < len(row) else ""
+            original_text = row[orig_idx].strip() if orig_idx < len(row) else ""
+            translation_text = row[trans_idx].strip() if trans_idx != -1 and trans_idx < len(row) else ""
+            
+            # Determine language
+            row_lang = default_lang
+            if lang_idx != -1 and lang_idx < len(row):
+                lang_val = row[lang_idx].strip()
+                row_lang = lang_map.get(lang_val, lang_val if lang_val else default_lang)
 
-                if q_id_str.isdigit() and answer:
-                    q_id = int(q_id_str)
-                    # Update database (will only update if is_synced=0)
-                    db_manager.update_user_translation(q_id, answer)
+            # Scenario A: Back-translation answer (Matching existing ID)
+            if q_id_str.isdigit() and int(q_id_str) > 0:
+                q_id = int(q_id_str)
+                # Only update if it's an answer (translation_text is typically empty for answers in this flow)
+                if original_text and not translation_text:
+                    db_manager.update_user_translation(q_id, original_text)
                     synced_count += 1
+            
+            # Scenario B: New translation task (Both Original and Translation present)
+            elif original_text and translation_text:
+                if not db_manager.translation_exists(original_text, translation_text, row_lang):
+                    # Form items are always locked for 3 days as per user request
+                    db_manager.add_translation(original_text, translation_text, lock_days=3, target_language=row_lang)
+                    new_task_count += 1
 
-        print(f"成功同步了 {synced_count} 筆回答 (Successfully synced {synced_count} answers).")
+        print(f"同步完成：解鎖了 {synced_count} 筆回答，新增了 {new_task_count} 筆翻譯任務。")
         return True
 
     except Exception as e:

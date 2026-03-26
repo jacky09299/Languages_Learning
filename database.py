@@ -132,6 +132,13 @@ class DatabaseManager:
         ''', (l2_text, l1_text, today.isoformat(), unlock_date, target_language))
         self.conn.commit()
 
+    def translation_exists(self, l2_text, l1_text, target_language="English"):
+        self.cursor.execute('''
+            SELECT 1 FROM translations 
+            WHERE l2_text = ? AND l1_text = ? AND target_language = ?
+        ''', (l2_text, l1_text, target_language))
+        return self.cursor.fetchone() is not None
+
     def check_translation_locks(self):
         today = datetime.date.today().isoformat()
         self.cursor.execute('''

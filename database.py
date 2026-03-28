@@ -318,6 +318,24 @@ class DatabaseManager:
         self.cursor.execute("UPDATE translations SET status = 'completed' WHERE id = ?", (translation_id,))
         self.conn.commit()
 
+    def revert_random_completed_translations(self, limit=3, target_language="English"):
+        self.cursor.execute('''
+            SELECT id FROM translations 
+            WHERE status = 'completed' AND target_language = ?
+            ORDER BY RANDOM() LIMIT ?
+        ''', (target_language, limit))
+        rows = self.cursor.fetchall()
+        for row in rows:
+            self.cursor.execute('''
+                UPDATE translations
+                SET status = 'ready',
+                    l1_user_translation = '',
+                    is_synced = 0
+                WHERE id = ?
+            ''', (row[0],))
+        self.conn.commit()
+
+
     # --- Dictogloss Methods ---
     def add_dictogloss(self, title, audio_path, text="", target_language="English"):
         self.cursor.execute('''

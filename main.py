@@ -8,6 +8,7 @@ from tab_dashboard import DashboardTab
 import threading
 import time
 import datetime
+import random
 from email_sender import send_translation_emails, send_addition_reminder
 from sheet_fetcher import fetch_and_sync_answers
 from db_viewer import DatabaseViewer
@@ -81,6 +82,19 @@ class LanguageLearningApp(tk.Tk):
             # Daily at 08:00 AM: Send Emails
             if now.hour == 8 and now.minute == 0 and last_sent_date != today_str:
                 print("Scheduler: Sending daily translation emails at 08:00 AM...")
+                try:
+                    if random.random() < 1/7:
+                        self.db.revert_random_completed_translations(limit=3)
+                        print("Scheduler: Reverted 3 random completed translations to ready.")
+                    
+                    ready_trans = self.db.get_ready_translations()
+                    unanswered_count = len([t for t in ready_trans if not t[3] or not t[3].strip()])
+                    if unanswered_count < 3:
+                        shortfall = 3 - unanswered_count
+                        self.db.revert_random_completed_translations(limit=shortfall)
+                        print(f"Scheduler: Reverted {shortfall} completed translations to reach minimum 3 questions.")
+                except Exception as e:
+                    print("Error preparing minimum daily translations:", e)
                 try:
                     send_translation_emails(self.db)
                     send_addition_reminder(self.db)

@@ -33,6 +33,7 @@ class SRSTab(ttk.Frame):
         btn_add_frame.grid(row=3, column=0, columnspan=2, pady=10)
         ttk.Button(btn_add_frame, text="新增 (Add)", command=self.add_srs_item).pack(side="left", padx=5)
         ttk.Button(btn_add_frame, text="從 Google Sheet 同步 (Sync from Google Sheet)", command=self.sync_srs_from_sheet).pack(side="left", padx=5)
+        ttk.Button(btn_add_frame, text="🔍 從原文尋找 (Search Texts)", command=self.search_in_translations).pack(side="left", padx=5)
 
         # Lower area: Review Due Items
         review_frame = ttk.LabelFrame(self, text="待複習項目 (Due for Review)")
@@ -53,6 +54,7 @@ class SRSTab(ttk.Frame):
         edit_frame = ttk.Frame(review_frame)
         edit_frame.pack(fill="x", pady=5)
         ttk.Button(edit_frame, text="修改解釋 (Edit Explanation)", command=self.edit_explanation).pack(side="left", padx=5, expand=True)
+        ttk.Button(edit_frame, text="🔍 從原文尋找 (Search Texts)", command=self.search_in_translations).pack(side="left", padx=5, expand=True)
         ttk.Button(edit_frame, text="刪除此項 (Delete Item)", command=self.delete_srs_item).pack(side="right", padx=5, expand=True)
 
     def add_srs_item(self):
@@ -111,6 +113,58 @@ class SRSTab(ttk.Frame):
         if messagebox.askyesno("確認", "確定要刪除嗎？\n(Are you sure you want to delete?)"):
             self.db.delete_srs_item(item_id)
             self.load_due_srs_items()
+
+    def search_in_translations(self):
+        word = ""
+        selection = self.srs_listbox.curselection()
+        if selection:
+            idx = selection[0]
+            item = self.due_srs_items[idx]
+            word = item[1].strip() if item[1] else ""
+        
+        if not word:
+            word = self.srs_word_var.get().strip()
+
+        if not word:
+            messagebox.showwarning("警告", "請先選擇要查詢的待複習項目，或在「單字」欄位輸入文字\n(Select an item or enter a word in the add section)")
+            return
+
+        current_lang = self.app.get_current_language()
+        results = self.db.search_translations_l2(word, current_lang)
+        
+        if not results:
+            messagebox.showinfo("搜尋結果", f"在「{current_lang}」的雙向翻譯中，找不到包含「{word}」的原文。")
+            return
+            
+        top = tk.Toplevel(self)
+        top.title(f"搜尋結果 (Search Results) - {word}")
+        top.geometry("700x500")
+        
+        frame = ttk.Frame(top)
+        frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        scrollbar = ttk.Scrollbar(frame)
+        scrollbar.pack(side="right", fill="y")
+        
+        text_widget = tk.Text(frame, wrap="word", font=("Arial", 12), yscrollcommand=scrollbar.set)
+        text_widget.pack(side="left", fill="both", expand=True)
+        scrollbar.config(command=text_widget.yview)
+        
+        text_widget.tag_configure("highlight", background="yellow", foreground="black")
+        
+        for i, res in enumerate(results, 1):
+            text_widget.insert(tk.END, f"【{i}】\n{res}\n\n")
+            
+        start_pos = "1.0"
+        while True:
+            start_pos = text_widget.search(word, start_pos, stopindex=tk.END, nocase=True)
+            if not start_pos:
+                break
+            end_pos = f"{start_pos}+{len(word)}c"
+            text_widget.tag_add("highlight", start_pos, end_pos)
+            start_pos = end_pos
+            
+        text_widget.config(state="disabled")
 
     def edit_explanation(self):
         selection = self.srs_listbox.curselection()

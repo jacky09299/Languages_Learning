@@ -150,6 +150,14 @@ class DatabaseManager:
         ''', (l2_text, l1_text, target_language))
         return self.cursor.fetchone() is not None
 
+    def search_translations_l2(self, keyword, target_language="English"):
+        query = f"%{keyword}%"
+        self.cursor.execute('''
+            SELECT l2_text FROM translations
+            WHERE target_language = ? AND l2_text LIKE ?
+        ''', (target_language, query))
+        return [row[0] for row in self.cursor.fetchall()]
+
     def check_translation_locks(self):
         today = datetime.date.today().isoformat()
         self.cursor.execute('''

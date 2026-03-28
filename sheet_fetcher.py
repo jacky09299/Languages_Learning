@@ -10,6 +10,32 @@ def load_config(config_path="config.json"):
             return json.load(f)
     return {}
 
+def save_config(config, config_path="config.json"):
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=4, ensure_ascii=False)
+
+def parse_tw_time(ts_str):
+    from datetime import datetime
+    try:
+        parts = ts_str.strip().split(' ')
+        if len(parts) >= 2:
+            date_part = parts[0]
+            time_part = parts[-1]
+            ampm_part = parts[1] if len(parts) > 2 else ""
+            
+            y, m, d = map(int, date_part.split('/'))
+            h, mn, s = map(int, time_part.split(':'))
+            
+            if ampm_part == '下午' and h < 12:
+                h += 12
+            elif ampm_part == '上午' and h == 12:
+                h = 0
+                
+            return datetime(y, m, d, h, mn, s)
+        return datetime.strptime(ts_str, "%Y/%m/%d %H:%M:%S")
+    except Exception:
+        return None
+
 def fetch_and_sync_answers(db_manager, default_lang="English"):
     config = load_config()
     csv_url = config.get("GOOGLE_SHEET_CSV_URL", "")
@@ -104,6 +130,8 @@ def fetch_and_sync_srs_items(db_manager):
     config = load_config()
     # Default URL if not provided in config
     csv_url = config.get("GOOGLE_SHEET_SRS_URL", "https://docs.google.com/spreadsheets/d/1MXLBfBRtEDMYDUO3DHlYeG2VTPzySuEyS9U2NOce8dI/export?format=csv")
+    last_sync_time_str = config.get("LAST_SRS_SYNC_TIME", None)
+    last_sync_time = parse_tw_time(last_sync_time_str) if last_sync_time_str else None
 
     try:
         response = urllib.request.urlopen(csv_url)
@@ -124,21 +152,35 @@ def fetch_and_sync_srs_items(db_manager):
             "西班牙文": "Spanish"
         }
 
-        lang_idx, word_idx, sent_idx, expl_idx = -1, -1, -1, -1
+        lang_idx, word_idx, sent_idx, expl_idx, time_idx = -1, -1, -1, -1, -1
         for i, col in enumerate(header):
             col = col.strip()
             if "語言" in col: lang_idx = i
             elif "單字" in col: word_idx = i
             elif "句子" in col: sent_idx = i
             elif "解釋" in col: expl_idx = i
+            elif "時間戳記" in col or "timestamp" in col.lower(): time_idx = i
 
         if -1 in [lang_idx, word_idx]:
             print("找不到必要的欄位 (Missing required columns in SRS CSV).")
             return 0
 
         synced_count = 0
+        max_seen_time = last_sync_time
+        max_seen_time_str = last_sync_time_str
+
         for row in csv_reader:
             if len(row) > max(lang_idx, word_idx, sent_idx, expl_idx):
+                if time_idx != -1 and time_idx < len(row):
+                    ts_str = row[time_idx].strip()
+                    row_time = parse_tw_time(ts_str)
+                    if row_time and last_sync_time and row_time <= last_sync_time:
+                        continue
+                    if row_time:
+                        if not max_seen_time or row_time > max_seen_time:
+                            max_seen_time = row_time
+                            max_seen_time_str = ts_str
+                            
                 lang_zh = row[lang_idx].strip()
                 word = row[word_idx].strip()
                 sentences = row[sent_idx].strip() if sent_idx != -1 else ""
@@ -151,9 +193,13 @@ def fetch_and_sync_srs_items(db_manager):
 
                 # Check if exact item exists
                 if not db_manager.srs_item_exists(word, sentences, explanation, target_lang):
-                    db_manager.add_srs_item(word, sentences, explanation, target_lang)
+                    db_manager.add_srs_item(word, sentences, explanation, "", target_lang)
                     synced_count += 1
-                    
+        
+        if max_seen_time_str and max_seen_time_str != last_sync_time_str:
+            config["LAST_SRS_SYNC_TIME"] = max_seen_time_str
+            save_config(config)
+            
         print(f"成功同步了 {synced_count} 筆 SRS 項目 (Successfully synced {synced_count} SRS items).")
         return synced_count
 

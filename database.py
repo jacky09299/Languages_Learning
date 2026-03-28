@@ -19,7 +19,8 @@ class DatabaseManager:
                 interval INTEGER DEFAULT 0,
                 step INTEGER DEFAULT 0,
                 target_language TEXT DEFAULT 'English',
-                explanation TEXT DEFAULT ''
+                explanation TEXT DEFAULT '',
+                associated_words TEXT DEFAULT ''
             )
         ''')
 
@@ -77,12 +78,12 @@ class DatabaseManager:
         self.conn.commit()
 
     # --- SRS Methods ---
-    def add_srs_item(self, word, sentences="", explanation="", target_language="English"):
+    def add_srs_item(self, word, sentences="", explanation="", associated_words="", target_language="English"):
         today = datetime.date.today().isoformat()
         self.cursor.execute('''
-            INSERT INTO srs_items (word, sentences, explanation, next_review_date, interval, step, target_language)
-            VALUES (?, ?, ?, ?, 0, 0, ?)
-        ''', (word, sentences, explanation, today, target_language))
+            INSERT INTO srs_items (word, sentences, explanation, associated_words, next_review_date, interval, step, target_language)
+            VALUES (?, ?, ?, ?, ?, 0, 0, ?)
+        ''', (word, sentences, explanation, associated_words, today, target_language))
         self.conn.commit()
 
     def srs_item_exists(self, word, sentences, explanation, target_language):
@@ -95,7 +96,7 @@ class DatabaseManager:
     def get_due_srs_items(self, target_language="English"):
         today = datetime.date.today().isoformat()
         self.cursor.execute('''
-            SELECT id, word, sentences, explanation, step FROM srs_items
+            SELECT id, word, sentences, explanation, step, associated_words FROM srs_items
             WHERE next_review_date <= ? AND target_language = ?
         ''', (today, target_language))
         return self.cursor.fetchall()
@@ -106,6 +107,14 @@ class DatabaseManager:
 
     def update_srs_explanation(self, item_id, explanation):
         self.cursor.execute("UPDATE srs_items SET explanation = ? WHERE id = ?", (explanation, item_id))
+        self.conn.commit()
+
+    def update_srs_item_content(self, item_id, word, sentences, explanation, associated_words):
+        self.cursor.execute('''
+            UPDATE srs_items 
+            SET word = ?, sentences = ?, explanation = ?, associated_words = ?
+            WHERE id = ?
+        ''', (word, sentences, explanation, associated_words, item_id))
         self.conn.commit()
 
     def update_srs_item(self, item_id, success):
@@ -158,6 +167,66 @@ class DatabaseManager:
         ''', (target_language, query))
         return [row[0] for row in self.cursor.fetchall()]
 
+    def search_translations_l2_advanced(self, keyword, target_language="English"):
+        import spacy
+        
+        if target_language == "English":
+            if not hasattr(self, 'nlp_en'):
+                self.nlp_en = spacy.load("en_core_web_sm")
+            nlp = self.nlp_en
+        elif target_language == "Korean":
+            if not hasattr(self, 'nlp_ko'):
+                self.nlp_ko = spacy.load("ko_core_news_sm")
+            nlp = self.nlp_ko
+        else:
+            # Fallback for unsupported languages
+            results = self.search_translations_l2(keyword, target_language)
+            return results, [keyword]
+
+        self.cursor.execute('SELECT l2_text FROM translations WHERE target_language = ?', (target_language,))
+        all_texts = [row[0] for row in self.cursor.fetchall()]
+
+        keyword_doc = nlp(keyword)
+        keyword_lemmas = set([token.lemma_.lower() for token in keyword_doc if not token.is_space and not token.is_punct])
+        
+        # If no lemmas found or empty keyword
+        if not keyword_lemmas:
+            results = self.search_translations_l2(keyword, target_language)
+            return results, [keyword]
+
+        results = []
+        matched_words = set()
+        for text in all_texts:
+            doc = nlp(text)
+            
+            # Group tokens by their lemma
+            doc_token_mapping = {}
+            for token in doc:
+                if not token.is_space and not token.is_punct:
+                    lemma = token.lemma_.lower()
+                    if lemma not in doc_token_mapping:
+                        doc_token_mapping[lemma] = []
+                    doc_token_mapping[lemma].append(token.text)
+            
+            # Check if all keyword lemmas are subset of the text lemmas
+            if all(k_lemma in doc_token_mapping for k_lemma in keyword_lemmas):
+                results.append(text)
+                for k_lemma in keyword_lemmas:
+                    for matched_text in doc_token_mapping[k_lemma]:
+                        matched_words.add(matched_text)
+                        
+        # Also include standard LIKE search results in case spacy misses something?
+        # Typically the user expects standard results to be included.
+        standard_results = self.search_translations_l2(keyword, target_language)
+        for s_res in standard_results:
+            if s_res not in results:
+                results.append(s_res)
+        
+        # Always highlight keyword
+        matched_words.add(keyword)
+
+        return results, list(matched_words)
+
     def check_translation_locks(self):
         today = datetime.date.today().isoformat()
         self.cursor.execute('''
@@ -185,6 +254,8 @@ class DatabaseManager:
             self.cursor.execute("ALTER TABLE srs_items ADD COLUMN target_language TEXT DEFAULT 'English'")
         if "explanation" not in srs_cols:
             self.cursor.execute("ALTER TABLE srs_items ADD COLUMN explanation TEXT DEFAULT ''")
+        if "associated_words" not in srs_cols:
+            self.cursor.execute("ALTER TABLE srs_items ADD COLUMN associated_words TEXT DEFAULT ''")
 
         # Dictogloss
         self.cursor.execute("PRAGMA table_info(dictogloss)")
@@ -203,8 +274,8 @@ class DatabaseManager:
                 if notes:
                     explanation += "\n[Notes] " + notes
                 self.cursor.execute('''
-                    INSERT INTO srs_items (word, sentences, explanation, next_review_date, interval, step, target_language)
-                    VALUES (?, ?, ?, ?, 0, 0, ?)
+                    INSERT INTO srs_items (word, sentences, explanation, associated_words, next_review_date, interval, step, target_language)
+                    VALUES (?, ?, ?, '', ?, 0, 0, ?)
                 ''', (l3_target, "", explanation, today, target_language))
             self.cursor.execute("DROP TABLE laddering_cards")
 
@@ -228,6 +299,14 @@ class DatabaseManager:
             UPDATE translations
             SET l1_user_translation = ?, is_synced = 1
             WHERE id = ? AND is_synced = 0
+        ''', (user_translation, translation_id))
+        self.conn.commit()
+
+    def update_user_translation_manual(self, translation_id, user_translation):
+        self.cursor.execute('''
+            UPDATE translations
+            SET l1_user_translation = ?, is_synced = 1
+            WHERE id = ?
         ''', (user_translation, translation_id))
         self.conn.commit()
 

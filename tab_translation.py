@@ -139,9 +139,13 @@ class TranslationTab(ttk.Frame):
             return
 
         idx = selection[0]
+        trans_id = self.ready_trans[idx][0]
         l1_text_intermediate = self.ready_trans[idx][1]
         l2_text_original = self.ready_trans[idx][2]
         l2_text_user = self.trans_back_input.get("1.0", tk.END).strip()
+
+        if l2_text_user:
+            self.db.update_user_translation_manual(trans_id, l2_text_user)
 
         msg = (
             "這是一個「雙向翻譯」練習：我先把原文翻譯成母語，幾天後再翻回原文。\n\n"

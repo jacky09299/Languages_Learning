@@ -1,5 +1,9 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
+import threading
+import os
+import shutil
+import datetime
 import threading
 from sheet_fetcher import fetch_and_sync_answers
 from email_sender import send_translation_emails
@@ -9,8 +13,29 @@ class TranslationTab(ttk.Frame):
         super().__init__(parent)
         self.db = db_manager
         self.app = app
+        self.CACHE_FILE = "recently_compared.json"
+        self._load_recently_compared()
         self.create_ui()
         self.load_translations()
+
+    def _load_recently_compared(self):
+        import json
+        if os.path.exists(self.CACHE_FILE):
+            try:
+                with open(self.CACHE_FILE, 'r', encoding='utf-8') as f:
+                    self.recently_compared_ids = set(json.load(f))
+            except Exception:
+                self.recently_compared_ids = set()
+        else:
+            self.recently_compared_ids = set()
+
+    def _save_recently_compared(self):
+        import json
+        try:
+            with open(self.CACHE_FILE, 'w', encoding='utf-8') as f:
+                json.dump(list(self.recently_compared_ids), f)
+        except Exception:
+            pass
 
     def refresh_data(self):
         self.load_translations()
@@ -65,6 +90,8 @@ class TranslationTab(ttk.Frame):
         btn_frame.pack(fill="x", pady=5)
         ttk.Button(btn_frame, text="對比原文 (Compare)", command=self.compare_translation).pack(side="left", padx=5)
         ttk.Button(btn_frame, text="標記完成 (Mark Completed)", command=self.complete_translation).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="上傳教材 PDF (Upload PDF)", command=self.upload_material_pdf).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="查看教材 (View Materials)", command=self.view_materials).pack(side="left", padx=5)
 
     def add_translation(self):
         l2_text = self.l2_text_input.get("1.0", tk.END).strip()
@@ -147,6 +174,9 @@ class TranslationTab(ttk.Frame):
         if l2_text_user:
             self.db.update_user_translation_manual(trans_id, l2_text_user)
 
+        self.recently_compared_ids.add(trans_id)
+        self._save_recently_compared()
+
         msg = (
             "這是一個「雙向翻譯」練習：我先把原文翻譯成母語，幾天後再翻回原文。\n\n"
             "目的是找出我「能理解但無法正確表達」的地方，以及語言能力的落差。\n\n"
@@ -191,3 +221,122 @@ class TranslationTab(ttk.Frame):
         self.db.complete_translation(trans_id)
         self.trans_back_input.delete("1.0", tk.END)
         self.load_translations()
+
+    def upload_material_pdf(self):
+        if not self.recently_compared_ids:
+            confirm = messagebox.askyesno("提示", "你尚未在這段時間內「對比」任何句子。確定要上傳沒有關聯任何句子的教材嗎？\n(建議先對比幾句話再上傳，系統會自動將教材與剛才對比過的句子連結)")
+            if not confirm:
+                return
+
+        file_path = filedialog.askopenfilename(
+            title="選擇教材 PDF",
+            filetypes=[("PDF Files", "*.pdf")]
+        )
+        if not file_path:
+            return
+
+        materials_dir = "materials"
+        if not os.path.exists(materials_dir):
+            os.makedirs(materials_dir)
+
+        now = datetime.datetime.now()
+        date_str = now.strftime("%Y-%m-%d_%H%M%S")
+        safe_original_name = os.path.basename(file_path).replace(" ", "_")
+        new_filename = f"{date_str}_{safe_original_name}"
+        dest_path = os.path.join(materials_dir, new_filename)
+
+        try:
+            shutil.copy(file_path, dest_path)
+            current_lang = self.app.get_current_language()
+            count = len(self.recently_compared_ids)
+            self.db.add_translation_material(new_filename, list(self.recently_compared_ids), target_language=current_lang)
+            self.recently_compared_ids.clear()
+            self._save_recently_compared()
+            messagebox.showinfo("成功", f"教材已成功儲存並連結到剛才對比的 {count} 個句子！")
+        except Exception as e:
+            messagebox.showerror("錯誤", f"儲存教材時發生錯誤: {str(e)}")
+
+    def view_materials(self):
+        top = tk.Toplevel(self)
+        top.title("查看教材 (View Materials)")
+        top.geometry("800x600")
+
+        left_frame = ttk.Frame(top)
+        left_frame.pack(side="left", fill="y", padx=10, pady=10)
+
+        right_frame = ttk.Frame(top)
+        right_frame.pack(side="right", fill="both", expand=True, padx=10, pady=10)
+
+        ttk.Label(left_frame, text="教材列表:").pack(anchor="w")
+        materials_listbox = tk.Listbox(left_frame, width=40)
+        materials_listbox.pack(fill="y", expand=True, pady=5)
+
+        ttk.Label(right_frame, text="關聯的句子:").pack(anchor="w")
+        sentences_text = tk.Text(right_frame, wrap="word")
+        sentences_text.pack(fill="both", expand=True, pady=5)
+
+        open_btn = ttk.Button(right_frame, text="打開此 PDF", state="disabled")
+        open_btn.pack(pady=5)
+
+        current_lang = self.app.get_current_language()
+        materials = self.db.get_translation_materials(target_language=current_lang)
+        
+        for mat in materials:
+            # mat: (id, pdf_name, created_date, translation_ids)
+            materials_listbox.insert(tk.END, f"[{mat[2][:10]}] {mat[1][:25]}...")
+
+        def on_select(event):
+            selection = materials_listbox.curselection()
+            if not selection: return
+            idx = selection[0]
+            mat = materials[idx]
+            
+            pdf_name = mat[1]
+            translation_ids_str = mat[3]
+            
+            pdf_path = os.path.join("materials", pdf_name)
+            if hasattr(os, 'startfile'):
+                if os.path.exists(pdf_path):
+                    open_btn.config(state="normal", command=lambda: os.startfile(os.path.abspath(pdf_path)))
+                else:
+                    open_btn.config(state="disabled")
+            else:
+                # Fallback for non-Windows
+                if os.path.exists(pdf_path):
+                    import subprocess
+                    import platform
+                    def open_file():
+                        if platform.system() == 'Darwin':
+                            subprocess.call(('open', pdf_path))
+                        elif platform.system() == 'Linux':
+                            subprocess.call(('xdg-open', pdf_path))
+                    open_btn.config(state="normal", command=open_file)
+                else:
+                    open_btn.config(state="disabled")
+            
+            sentences_text.config(state="normal")
+            sentences_text.delete("1.0", tk.END)
+            
+            if not translation_ids_str:
+                sentences_text.insert(tk.END, "此教材沒有關聯任何句子。")
+            else:
+                ids_list = []
+                for x in translation_ids_str.split(","):
+                    try:
+                        ids_list.append(int(x.strip()))
+                    except ValueError:
+                        pass
+                
+                translations = self.db.get_translations_by_ids(ids_list)
+                for t in translations:
+                    # t: (id, l2_text, l1_text, l1_user_translation)
+                    sentences_text.insert(tk.END, f"--- ID: {t[0]} ---\n")
+                    sentences_text.insert(tk.END, f"原文: {t[1]}\n")
+                    sentences_text.insert(tk.END, f"提示: {t[2]}\n")
+                    if t[3]:
+                        sentences_text.insert(tk.END, f"我的翻譯: {t[3]}\n")
+                    sentences_text.insert(tk.END, "\n")
+            
+            sentences_text.config(state="disabled")
+
+        materials_listbox.bind("<<ListboxSelect>>", on_select)

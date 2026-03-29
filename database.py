@@ -72,6 +72,17 @@ class DatabaseManager:
             )
         ''')
 
+        # 7. Translation Materials
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS translation_materials (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                pdf_name TEXT NOT NULL,
+                created_date DATE NOT NULL,
+                translation_ids TEXT NOT NULL,
+                target_language TEXT DEFAULT 'English'
+            )
+        ''')
+
         # Upgrade schema if older version
         self._upgrade_schema()
 
@@ -404,6 +415,36 @@ class DatabaseManager:
     def has_any_resources(self):
         self.cursor.execute('SELECT COUNT(*) FROM daily_resources')
         return self.cursor.fetchone()[0] > 0
+
+    # --- Translation Materials Methods ---
+    def add_translation_material(self, pdf_name, translation_ids_list, target_language="English"):
+        today = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ids_str = ",".join(map(str, translation_ids_list))
+        self.cursor.execute('''
+            INSERT INTO translation_materials (pdf_name, created_date, translation_ids, target_language)
+            VALUES (?, ?, ?, ?)
+        ''', (pdf_name, today, ids_str, target_language))
+        self.conn.commit()
+
+    def get_translation_materials(self, target_language="English"):
+        self.cursor.execute('''
+            SELECT id, pdf_name, created_date, translation_ids 
+            FROM translation_materials 
+            WHERE target_language = ?
+            ORDER BY id DESC
+        ''', (target_language,))
+        return self.cursor.fetchall()
+
+    def get_translations_by_ids(self, ids_list):
+        if not ids_list:
+            return []
+        placeholders = ",".join(["?"] * len(ids_list))
+        self.cursor.execute(f'''
+            SELECT id, l2_text, l1_text, l1_user_translation 
+            FROM translations
+            WHERE id IN ({placeholders})
+        ''', tuple(ids_list))
+        return self.cursor.fetchall()
 
     def close(self):
         self.conn.close()

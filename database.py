@@ -309,7 +309,7 @@ class DatabaseManager:
         self.cursor.execute('''
             UPDATE translations
             SET l1_user_translation = ?, is_synced = 1
-            WHERE id = ? AND is_synced = 0
+            WHERE id = ?
         ''', (user_translation, translation_id))
         self.conn.commit()
 

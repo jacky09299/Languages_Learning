@@ -39,6 +39,8 @@ def parse_tw_time(ts_str):
 def fetch_and_sync_answers(db_manager, default_lang="English"):
     config = load_config()
     csv_url = config.get("GOOGLE_SHEET_CSV_URL", "")
+    last_sync_time_str = config.get("LAST_TRANS_SYNC_TIME", None)
+    last_sync_time = parse_tw_time(last_sync_time_str) if last_sync_time_str else None
 
     if not csv_url:
         print("未設定有效的 Google Sheet CSV URL (CSV URL not configured).")
@@ -61,6 +63,7 @@ def fetch_and_sync_answers(db_manager, default_lang="English"):
         orig_idx = -1
         trans_idx = -1
         lang_idx = -1
+        time_idx = -1
 
         for i, col_name in enumerate(header):
             col_lower = col_name.lower()
@@ -72,6 +75,8 @@ def fetch_and_sync_answers(db_manager, default_lang="English"):
                 trans_idx = i
             elif "語言" in col_name or "language" in col_lower:
                 lang_idx = i
+            elif "時間戳記" in col_name or "timestamp" in col_lower:
+                time_idx = i
 
         # Fallback if names are different
         if q_id_idx == -1 and len(header) >= 1: q_id_idx = 0
@@ -84,6 +89,8 @@ def fetch_and_sync_answers(db_manager, default_lang="English"):
 
         synced_count = 0
         new_task_count = 0
+        max_seen_time = last_sync_time
+        max_seen_time_str = last_sync_time_str
         
         lang_map = {
             "英文": "English", "韓文": "Korean", "日文": "Japanese",
@@ -94,8 +101,18 @@ def fetch_and_sync_answers(db_manager, default_lang="English"):
             if len(row) <= max(q_id_idx, orig_idx):
                 continue
                 
-            q_id_str = row[q_id_idx].strip() if q_id_idx < len(row) else ""
-            original_text = row[orig_idx].strip() if orig_idx < len(row) else ""
+            if time_idx != -1 and time_idx < len(row):
+                ts_str = row[time_idx].strip()
+                row_time = parse_tw_time(ts_str)
+                if row_time and last_sync_time and row_time <= last_sync_time:
+                    continue
+                if row_time:
+                    if not max_seen_time or row_time > max_seen_time:
+                        max_seen_time = row_time
+                        max_seen_time_str = ts_str
+
+            q_id_str = row[q_id_idx].strip() if q_id_idx != -1 and q_id_idx < len(row) else ""
+            original_text = row[orig_idx].strip() if orig_idx != -1 and orig_idx < len(row) else ""
             translation_text = row[trans_idx].strip() if trans_idx != -1 and trans_idx < len(row) else ""
             
             # Determine language
@@ -118,6 +135,10 @@ def fetch_and_sync_answers(db_manager, default_lang="English"):
                     # Form items are always locked for 3 days as per user request
                     db_manager.add_translation(original_text, translation_text, lock_days=3, target_language=row_lang)
                     new_task_count += 1
+
+        if max_seen_time_str and max_seen_time_str != last_sync_time_str:
+            config["LAST_TRANS_SYNC_TIME"] = max_seen_time_str
+            save_config(config)
 
         print(f"同步完成：解鎖了 {synced_count} 筆回答，新增了 {new_task_count} 筆翻譯任務。")
         return True

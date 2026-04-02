@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox, filedialog, simpledialog
 import threading
 import os
 import shutil
@@ -92,6 +92,7 @@ class TranslationTab(ttk.Frame):
         ttk.Button(btn_frame, text="標記完成 (Mark Completed)", command=self.complete_translation).pack(side="left", padx=5)
         ttk.Button(btn_frame, text="上傳教材 PDF (Upload PDF)", command=self.upload_material_pdf).pack(side="left", padx=5)
         ttk.Button(btn_frame, text="查看教材 (View Materials)", command=self.view_materials).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="顯示分數曲線 (Score Curve)", command=self.show_score_curve).pack(side="left", padx=5)
 
     def add_translation(self):
         l2_text = self.l2_text_input.get("1.0", tk.END).strip()
@@ -235,6 +236,10 @@ class TranslationTab(ttk.Frame):
         if not file_path:
             return
 
+        score = simpledialog.askinteger("輸入分數 (Score)", "請為這次對比練習輸入分數 (例如: 0~100)\n取消則預設為 0 分:", minvalue=0, maxvalue=100)
+        if score is None:
+             score = 0
+
         materials_dir = "materials"
         if not os.path.exists(materials_dir):
             os.makedirs(materials_dir)
@@ -249,12 +254,63 @@ class TranslationTab(ttk.Frame):
             shutil.copy(file_path, dest_path)
             current_lang = self.app.get_current_language()
             count = len(self.recently_compared_ids)
-            self.db.add_translation_material(new_filename, list(self.recently_compared_ids), target_language=current_lang)
+            self.db.add_translation_material(new_filename, list(self.recently_compared_ids), score=score, target_language=current_lang)
             self.recently_compared_ids.clear()
             self._save_recently_compared()
             messagebox.showinfo("成功", f"教材已成功儲存並連結到剛才對比的 {count} 個句子！")
         except Exception as e:
             messagebox.showerror("錯誤", f"儲存教材時發生錯誤: {str(e)}")
+
+    def show_score_curve(self):
+        try:
+            import matplotlib.pyplot as plt
+            from datetime import datetime
+        except ImportError:
+            messagebox.showerror("錯誤", "需要安裝 matplotlib 庫才能顯示圖表。\n請在終端機執行 pip install matplotlib")
+            return
+            
+        current_lang = self.app.get_current_language()
+        materials = self.db.get_translation_materials(target_language=current_lang)
+        if not materials:
+            messagebox.showinfo("提示", "目前沒有教材資料，無法繪製曲線。")
+            return
+            
+        # Reverse to get chronological order (they are sorted DESC by ID)
+        materials_chronological = list(reversed(materials))
+        
+        valid_materials = []
+        for mat in materials_chronological:
+            try:
+                # mat: (id, pdf_name, created_date, translation_ids, score)
+                dt = datetime.strptime(mat[2], "%Y-%m-%d %H:%M:%S")
+                score = mat[4] if len(mat) > 4 and mat[4] is not None else 0
+                valid_materials.append((dt, score))
+            except Exception:
+                pass
+                
+        if not valid_materials:
+            messagebox.showinfo("提示", "沒有可以繪製的有效資料。")
+            return
+            
+        first_date = valid_materials[0][0]
+        
+        days_list = []
+        scores_list = []
+        
+        for dt, score in valid_materials:
+            delta = dt - first_date
+            # Provide decimal days or integer days? Let's use decimal days to spread same-day uploads
+            days = delta.total_seconds() / (24 * 3600)
+            days_list.append(days)
+            scores_list.append(score)
+            
+        plt.figure(figsize=(8, 5))
+        plt.plot(days_list, scores_list, marker='o', linestyle='-', color='b')
+        plt.title(f"Score Curve ({current_lang})")
+        plt.xlabel("Days since first upload (Day 0)")
+        plt.ylabel("Score")
+        plt.grid(True)
+        plt.show()
 
     def view_materials(self):
         top = tk.Toplevel(self)

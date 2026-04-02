@@ -258,6 +258,12 @@ class DatabaseManager:
         if "target_language" not in columns:
             self.cursor.execute("ALTER TABLE translations ADD COLUMN target_language TEXT DEFAULT 'English'")
             
+        # Translation Materials
+        self.cursor.execute("PRAGMA table_info(translation_materials)")
+        mat_cols = [info[1] for info in self.cursor.fetchall()]
+        if "score" not in mat_cols:
+            self.cursor.execute("ALTER TABLE translation_materials ADD COLUMN score INTEGER DEFAULT 0")
+            
         # SRS Items
         self.cursor.execute("PRAGMA table_info(srs_items)")
         srs_cols = [info[1] for info in self.cursor.fetchall()]
@@ -417,18 +423,18 @@ class DatabaseManager:
         return self.cursor.fetchone()[0] > 0
 
     # --- Translation Materials Methods ---
-    def add_translation_material(self, pdf_name, translation_ids_list, target_language="English"):
+    def add_translation_material(self, pdf_name, translation_ids_list, score=0, target_language="English"):
         today = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         ids_str = ",".join(map(str, translation_ids_list))
         self.cursor.execute('''
-            INSERT INTO translation_materials (pdf_name, created_date, translation_ids, target_language)
-            VALUES (?, ?, ?, ?)
-        ''', (pdf_name, today, ids_str, target_language))
+            INSERT INTO translation_materials (pdf_name, created_date, translation_ids, score, target_language)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (pdf_name, today, ids_str, score, target_language))
         self.conn.commit()
 
     def get_translation_materials(self, target_language="English"):
         self.cursor.execute('''
-            SELECT id, pdf_name, created_date, translation_ids 
+            SELECT id, pdf_name, created_date, translation_ids, score
             FROM translation_materials 
             WHERE target_language = ?
             ORDER BY id DESC

@@ -80,8 +80,8 @@ class LanguageLearningApp(tk.Tk):
             today_str = now.strftime("%Y-%m-%d")
 
             # Daily at 08:00 AM: Send Emails
-            if now.hour == 8 and now.minute == 0 and last_sent_date != today_str:
-                print("Scheduler: Sending daily translation emails at 08:00 AM...")
+            if now.hour == 6 and now.minute == 0 and last_sent_date != today_str:
+                print("Scheduler: Sending daily translation emails at 06:00 AM...")
                 try:
                     if random.random() < 1/7:
                         self.db.revert_random_completed_translations(limit=3)

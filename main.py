@@ -5,6 +5,7 @@ from tab_srs import SRSTab
 from tab_translation import TranslationTab
 from tab_dictogloss import DictoglossTab
 from tab_dashboard import DashboardTab
+from tab_settings import SettingsTab
 import threading
 import time
 import datetime
@@ -45,11 +46,13 @@ class LanguageLearningApp(tk.Tk):
         self.translation_tab = TranslationTab(self.notebook, self.db, self)
         self.dictogloss_tab = DictoglossTab(self.notebook, self.db, self)
         self.dashboard_tab = DashboardTab(self.notebook, self.db, self)
+        self.settings_tab = SettingsTab(self.notebook, self.db, self)
 
         self.notebook.add(self.srs_tab, text="SRS 間隔重複")
         self.notebook.add(self.translation_tab, text="雙向翻譯")
         self.notebook.add(self.dictogloss_tab, text="聽寫重構")
         self.notebook.add(self.dashboard_tab, text="15/30/15 儀表板")
+        self.notebook.add(self.settings_tab, text="設定")
 
         # Start Background scheduler thread
         self.scheduler_running = True
@@ -69,6 +72,7 @@ class LanguageLearningApp(tk.Tk):
         self.translation_tab.refresh_data()
         self.dictogloss_tab.refresh_data()
         self.dashboard_tab.refresh_data()
+        self.settings_tab.refresh_data()
 
     def run_scheduler(self):
         last_sent_date = None

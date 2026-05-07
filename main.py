@@ -93,10 +93,10 @@ class LanguageLearningApp(tk.Tk):
                     
                     ready_trans = self.db.get_ready_translations()
                     unanswered_count = len([t for t in ready_trans if not t[3] or not t[3].strip()])
-                    if unanswered_count < 6:
-                        shortfall = 6 - unanswered_count
+                    if unanswered_count < 2:
+                        shortfall = 2 - unanswered_count
                         self.db.revert_random_completed_translations(limit=shortfall)
-                        print(f"Scheduler: Reverted {shortfall} completed translations to reach minimum 3 questions.")
+                        print(f"Scheduler: Reverted {shortfall} completed translations to reach minimum 2 questions.")
                 except Exception as e:
                     print("Error preparing minimum daily translations:", e)
                 try:

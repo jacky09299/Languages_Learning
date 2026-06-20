@@ -5,6 +5,7 @@ from tab_srs import SRSTab
 from tab_translation import TranslationTab
 from tab_dictogloss import DictoglossTab
 from tab_dashboard import DashboardTab
+from tab_settings import SettingsTab
 import threading
 import time
 import datetime
@@ -45,11 +46,13 @@ class LanguageLearningApp(tk.Tk):
         self.translation_tab = TranslationTab(self.notebook, self.db, self)
         self.dictogloss_tab = DictoglossTab(self.notebook, self.db, self)
         self.dashboard_tab = DashboardTab(self.notebook, self.db, self)
+        self.settings_tab = SettingsTab(self.notebook, self.db, self)
 
         self.notebook.add(self.srs_tab, text="SRS 間隔重複")
         self.notebook.add(self.translation_tab, text="雙向翻譯")
         self.notebook.add(self.dictogloss_tab, text="聽寫重構")
         self.notebook.add(self.dashboard_tab, text="15/30/15 儀表板")
+        self.notebook.add(self.settings_tab, text="設定")
 
         # Start Background scheduler thread
         self.scheduler_running = True
@@ -69,6 +72,7 @@ class LanguageLearningApp(tk.Tk):
         self.translation_tab.refresh_data()
         self.dictogloss_tab.refresh_data()
         self.dashboard_tab.refresh_data()
+        self.settings_tab.refresh_data()
 
     def run_scheduler(self):
         last_sent_date = None
@@ -80,8 +84,8 @@ class LanguageLearningApp(tk.Tk):
             today_str = now.strftime("%Y-%m-%d")
 
             # Daily at 08:00 AM: Send Emails
-            if now.hour == 8 and now.minute == 0 and last_sent_date != today_str:
-                print("Scheduler: Sending daily translation emails at 08:00 AM...")
+            if now.hour == 6 and now.minute == 0 and last_sent_date != today_str:
+                print("Scheduler: Sending daily translation emails at 06:00 AM...")
                 try:
                     if random.random() < 1/7:
                         self.db.revert_random_completed_translations(limit=3)
@@ -89,10 +93,10 @@ class LanguageLearningApp(tk.Tk):
                     
                     ready_trans = self.db.get_ready_translations()
                     unanswered_count = len([t for t in ready_trans if not t[3] or not t[3].strip()])
-                    if unanswered_count < 3:
-                        shortfall = 3 - unanswered_count
+                    if unanswered_count < 2:
+                        shortfall = 2 - unanswered_count
                         self.db.revert_random_completed_translations(limit=shortfall)
-                        print(f"Scheduler: Reverted {shortfall} completed translations to reach minimum 3 questions.")
+                        print(f"Scheduler: Reverted {shortfall} completed translations to reach minimum 2 questions.")
                 except Exception as e:
                     print("Error preparing minimum daily translations:", e)
                 try:

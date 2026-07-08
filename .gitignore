@@ -212,3 +212,5 @@ config.json
 .mov
 jokes.db
 *json
+*.db
+language_learning.db

@@ -13,7 +13,7 @@ if exist app_icon.png (
 )
 set ICON_CMD=
 if exist app_icon.ico set ICON_CMD=--icon=app_icon.ico
-pyinstaller --onefile --windowed %ICON_CMD% --name Language_Learning main.py
+pyinstaller --onefile --windowed %ICON_CMD% --add-data "app_icon.png;." --add-data "app_icon.ico;." --name Language_Learning main.py
 
 echo [2/4] 準備發布資料夾...
 if exist Release_Package rmdir /s /q Release_Package

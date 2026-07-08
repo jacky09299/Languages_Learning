@@ -91,6 +91,14 @@ class DatabaseManager:
             )
         ''')
 
+        # 9. App Settings
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS app_settings (
+                setting_key TEXT PRIMARY KEY,
+                setting_value TEXT NOT NULL
+            )
+        ''')
+
         # Upgrade schema if older version
         self._upgrade_schema()
 
@@ -477,6 +485,29 @@ class DatabaseManager:
     def delete_prompt(self, prompt_key):
         self.cursor.execute("DELETE FROM custom_prompts WHERE prompt_key = ?", (prompt_key,))
         self.conn.commit()
+
+    # --- App Settings Methods ---
+    def get_setting(self, key, default_value=None):
+        self.cursor.execute("SELECT setting_value FROM app_settings WHERE setting_key = ?", (key,))
+        row = self.cursor.fetchone()
+        if row:
+            import json
+            try:
+                return json.loads(row[0])
+            except Exception:
+                return row[0]
+        return default_value
+
+    def set_setting(self, key, value):
+        import json
+        value_str = json.dumps(value)
+        self.cursor.execute('''
+            INSERT INTO app_settings (setting_key, setting_value)
+            VALUES (?, ?)
+            ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value
+        ''', (key, value_str))
+        self.conn.commit()
+
 
     def close(self):
         self.conn.close()

@@ -13,12 +13,72 @@ import random
 from email_sender import send_translation_emails, send_addition_reminder
 from sheet_fetcher import fetch_and_sync_answers
 from db_viewer import DatabaseViewer
+import sys
+import os
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 class LanguageLearningApp(tk.Tk):
     def __init__(self):
         super().__init__()
+        
+        self.withdraw()  # Hide main window initially
+        
+        # --- Splash Screen ---
+        splash = tk.Toplevel(self)
+        splash.overrideredirect(True)
+        transparent_color = "#abcdef"
+        splash.attributes("-transparentcolor", transparent_color)
+        splash.config(bg=transparent_color)
+        
+        try:
+            from PIL import Image, ImageTk
+            original_image = Image.open(resource_path("app_icon.png"))
+            resized_image = original_image.resize((300, 300), Image.LANCZOS)
+            self.splash_img = ImageTk.PhotoImage(resized_image)
+            tk.Label(splash, image=self.splash_img, bg=transparent_color).pack()
+            splash.geometry("300x300")
+        except Exception:
+            tk.Label(splash, text="Loading...\nLanguage Learning", font=("Helvetica", 16), bg=transparent_color).pack(expand=True, fill="both")
+            splash.geometry("300x150")
+
+        splash.update_idletasks()
+        
+        # Center Splash
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        x = (screen_width / 2) - (splash.winfo_width() / 2)
+        y = (screen_height / 2) - (splash.winfo_height() / 2)
+        splash.geometry(f'+{int(x)}+{int(y)}')
+        
+        # Keep splash responsive for 2 seconds
+        start_time = time.time()
+        while time.time() - start_time < 2.0:
+            splash.update()
+            time.sleep(0.05)
+            
+        splash.destroy()
+        self.deiconify()  # Show main window
+        
+        # --- App Window setup ---
         self.title("多國語言學習系統 (Language Learning System)")
         self.geometry("800x600")
+
+        # Set App Icon
+        try:
+            self.iconbitmap(resource_path("app_icon.ico"))
+        except Exception:
+            try:
+                self.iconphoto(False, tk.PhotoImage(file=resource_path("app_icon.png")))
+            except Exception:
+                pass
 
         # Initialize Database
         self.db = DatabaseManager()
@@ -99,16 +159,21 @@ class LanguageLearningApp(tk.Tk):
             if now.hour == 6 and now.minute == 0 and last_sent_date != today_str:
                 print("Scheduler: Sending daily translation emails at 06:00 AM...")
                 try:
-                    if random.random() < 1/7:
-                        self.db.revert_random_completed_translations(limit=3)
-                        print("Scheduler: Reverted 3 random completed translations to ready.")
+                    # Load SRS configuration from database
+                    srs_prob = self.db.get_setting("srs_revert_probability", 1/7)
+                    srs_count = self.db.get_setting("srs_revert_count", 3)
+                    srs_min = self.db.get_setting("srs_min_unanswered", 2)
+
+                    if random.random() < srs_prob:
+                        self.db.revert_random_completed_translations(limit=srs_count)
+                        print(f"Scheduler: Reverted {srs_count} random completed translations to ready.")
                     
                     ready_trans = self.db.get_ready_translations()
                     unanswered_count = len([t for t in ready_trans if not t[3] or not t[3].strip()])
-                    if unanswered_count < 2:
-                        shortfall = 2 - unanswered_count
+                    if unanswered_count < srs_min:
+                        shortfall = srs_min - unanswered_count
                         self.db.revert_random_completed_translations(limit=shortfall)
-                        print(f"Scheduler: Reverted {shortfall} completed translations to reach minimum 2 questions.")
+                        print(f"Scheduler: Reverted {shortfall} completed translations to reach minimum {srs_min} questions.")
                 except Exception as e:
                     print("Error preparing minimum daily translations:", e)
                 try:

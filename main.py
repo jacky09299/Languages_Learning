@@ -23,6 +23,15 @@ class LanguageLearningApp(tk.Tk):
         # Initialize Database
         self.db = DatabaseManager()
 
+        import os
+        if not os.path.exists("config.json"):
+            from wizard import run_initialization_wizard
+            success = run_initialization_wizard(self, self.db)
+            if not success:
+                self.destroy()
+                import sys
+                sys.exit(0)
+
         # Add language selector at the top
         top_frame = ttk.Frame(self)
         top_frame.pack(fill="x", padx=10, pady=5)
@@ -58,6 +67,9 @@ class LanguageLearningApp(tk.Tk):
         self.scheduler_running = True
         self.schedule_thread = threading.Thread(target=self.run_scheduler, daemon=True)
         self.schedule_thread.start()
+        
+        # Force a data refresh shortly after the main loop starts to ensure all UI elements render correctly
+        self.after(500, self.on_language_change)
 
     def open_db_viewer(self):
         # Open DB Viewer Toplevel window

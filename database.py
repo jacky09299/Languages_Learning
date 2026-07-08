@@ -83,6 +83,14 @@ class DatabaseManager:
             )
         ''')
 
+        # 8. Custom Prompts
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS custom_prompts (
+                prompt_key TEXT PRIMARY KEY,
+                prompt_text TEXT NOT NULL
+            )
+        ''')
+
         # Upgrade schema if older version
         self._upgrade_schema()
 
@@ -451,6 +459,24 @@ class DatabaseManager:
             WHERE id IN ({placeholders})
         ''', tuple(ids_list))
         return self.cursor.fetchall()
+
+    # --- Custom Prompts Methods ---
+    def get_prompt(self, prompt_key):
+        self.cursor.execute("SELECT prompt_text FROM custom_prompts WHERE prompt_key = ?", (prompt_key,))
+        result = self.cursor.fetchone()
+        return result[0] if result else None
+
+    def save_prompt(self, prompt_key, prompt_text):
+        self.cursor.execute('''
+            INSERT INTO custom_prompts (prompt_key, prompt_text)
+            VALUES (?, ?)
+            ON CONFLICT(prompt_key) DO UPDATE SET prompt_text = excluded.prompt_text
+        ''', (prompt_key, prompt_text))
+        self.conn.commit()
+
+    def delete_prompt(self, prompt_key):
+        self.cursor.execute("DELETE FROM custom_prompts WHERE prompt_key = ?", (prompt_key,))
+        self.conn.commit()
 
     def close(self):
         self.conn.close()

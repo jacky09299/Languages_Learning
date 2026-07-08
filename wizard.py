@@ -141,14 +141,13 @@ def run_initialization_wizard(root_window, db_manager):
                     if not vd["srs_content"].get():
                         cursor.execute("DELETE FROM srs_items WHERE target_language=?", (lang,))
                     elif not vd["srs_progress"].get():
-                        cursor.execute("UPDATE srs_items SET step=0, next_review=date('now'), last_reviewed=NULL, success_count=0, failure_count=0 WHERE target_language=?", (lang,))
+                        cursor.execute("UPDATE srs_items SET step=0, interval=0, next_review_date=date('now') WHERE target_language=?", (lang,))
                         
                     # Translations
                     if not vd["trans_content"].get():
                         cursor.execute("DELETE FROM translations WHERE target_language=?", (lang,))
                     elif not vd["trans_progress"].get():
-                        # Uncomplete all translations
-                        cursor.execute("UPDATE translations SET completed=0, lock_until=date('now'), l1_user_translation='' WHERE target_language=?", (lang,))
+                        cursor.execute("UPDATE translations SET status='ready', unlock_date=date('now'), l1_user_translation='', is_synced=0 WHERE target_language=?", (lang,))
                         
                     # Daily
                     if not vd["daily"].get():

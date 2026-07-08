@@ -175,6 +175,16 @@ class TranslationTab(ttk.Frame):
         self.load_translations()
 
     def load_translations(self):
+        # Save current text before reloading
+        if hasattr(self, 'current_trans_idx') and self.current_trans_idx is not None:
+            if getattr(self, 'ready_trans', None) and self.current_trans_idx < len(self.ready_trans):
+                old_id = self.ready_trans[self.current_trans_idx][0]
+                current_text = self.trans_back_input.get("1.0", tk.END).strip()
+                old_text = self.ready_trans[self.current_trans_idx][3] or ""
+                if current_text != old_text:
+                    self.db.update_user_translation_manual(old_id, current_text)
+                    
+        self.current_trans_idx = None
         self.trans_listbox.delete(0, tk.END)
         current_lang = self.app.get_current_language()
         self.ready_trans = self.db.get_ready_translations(target_language=current_lang)
@@ -208,9 +218,29 @@ class TranslationTab(ttk.Frame):
 
     def on_trans_select(self, event):
         selection = self.trans_listbox.curselection()
-        if not selection: return
+        if not selection: 
+            self.current_trans_idx = None
+            return
 
         idx = selection[0]
+        
+        if hasattr(self, 'current_trans_idx') and self.current_trans_idx == idx:
+            return # Same selection, do nothing
+            
+        # Save previous before changing
+        if hasattr(self, 'current_trans_idx') and self.current_trans_idx is not None:
+            old_idx = self.current_trans_idx
+            if getattr(self, 'ready_trans', None) and old_idx < len(self.ready_trans):
+                old_id = self.ready_trans[old_idx][0]
+                current_text = self.trans_back_input.get("1.0", tk.END).strip()
+                old_text = self.ready_trans[old_idx][3] or ""
+                if current_text != old_text:
+                    self.db.update_user_translation_manual(old_id, current_text)
+                    t = self.ready_trans[old_idx]
+                    self.ready_trans[old_idx] = (t[0], t[1], t[2], current_text)
+                    
+        self.current_trans_idx = idx
+
         l1_text = self.ready_trans[idx][1]
         user_trans = self.ready_trans[idx][3]
 

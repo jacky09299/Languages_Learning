@@ -214,3 +214,5 @@ jokes.db
 *json
 *.db
 language_learning.db
+
+.db_backup/

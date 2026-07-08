@@ -216,3 +216,6 @@ jokes.db
 language_learning.db
 
 .db_backup/
+*.exe
+*.zip
+Release_Package/

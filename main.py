@@ -23,6 +23,17 @@ class LanguageLearningApp(tk.Tk):
         # Initialize Database
         self.db = DatabaseManager()
 
+        import os
+        if not os.path.exists("config.json"):
+            self.withdraw()
+            from wizard import run_initialization_wizard
+            success = run_initialization_wizard(self, self.db)
+            if not success:
+                self.destroy()
+                import sys
+                sys.exit(0)
+            self.deiconify()
+
         # Add language selector at the top
         top_frame = ttk.Frame(self)
         top_frame.pack(fill="x", padx=10, pady=5)

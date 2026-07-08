@@ -86,13 +86,78 @@ class TranslationTab(ttk.Frame):
         self.trans_back_input = tk.Text(right_frame, height=8, width=40)
         self.trans_back_input.pack(fill="both", expand=True, pady=5)
 
-        btn_frame = ttk.Frame(right_frame)
-        btn_frame.pack(fill="x", pady=5)
-        ttk.Button(btn_frame, text="對比原文 (Compare)", command=self.compare_translation).pack(side="left", padx=5)
-        ttk.Button(btn_frame, text="標記完成 (Mark Completed)", command=self.complete_translation).pack(side="left", padx=5)
-        ttk.Button(btn_frame, text="上傳教材 PDF (Upload PDF)", command=self.upload_material_pdf).pack(side="left", padx=5)
-        ttk.Button(btn_frame, text="查看教材 (View Materials)", command=self.view_materials).pack(side="left", padx=5)
-        ttk.Button(btn_frame, text="顯示分數曲線 (Score Curve)", command=self.show_score_curve).pack(side="left", padx=5)
+        btn_frame_1 = ttk.Frame(right_frame)
+        btn_frame_1.pack(fill="x", pady=5)
+        ttk.Button(btn_frame_1, text="對比原文 (Compare)", command=self.compare_translation).pack(side="left", padx=5)
+        ttk.Button(btn_frame_1, text="編輯對比範本 (Edit Prompt)", command=self.edit_compare_prompt).pack(side="left", padx=5)
+        ttk.Button(btn_frame_1, text="標記完成 (Mark Completed)", command=self.complete_translation).pack(side="left", padx=5)
+        
+        btn_frame_2 = ttk.Frame(right_frame)
+        btn_frame_2.pack(fill="x", pady=2)
+        ttk.Button(btn_frame_2, text="上傳教材 PDF (Upload PDF)", command=self.upload_material_pdf).pack(side="left", padx=5)
+        ttk.Button(btn_frame_2, text="查看教材 (View Materials)", command=self.view_materials).pack(side="left", padx=5)
+        ttk.Button(btn_frame_2, text="顯示分數曲線 (Score Curve)", command=self.show_score_curve).pack(side="left", padx=5)
+
+    def get_default_compare_prompt(self):
+        return (
+            "這是一個「雙向翻譯」練習：我先把原文翻譯成母語，幾天後再翻回原文。\n\n"
+            "目的是找出我「能理解但無法正確表達」的地方，以及語言能力的落差。\n\n"
+            "請幫我分析我的翻譯過程：\n\n"
+            "1. 比較原文與我翻回來的句子\n"
+            "2. 指出錯誤與不自然之處\n"
+            "3. 分析這些錯誤是否來自「中間翻譯」\n"
+            "4. 告訴我哪些是母語干擾造成的\n"
+            "5. 提供最接近原文的正確版本\n"
+            "6. 教我應該怎麼避免這類錯誤\n"
+            "7. 請幫我分類這些錯誤（例如：搭配錯誤 / 文法錯誤 / 語氣問題 / 母語直譯）\n\n\n"
+            "【原文】\n"
+            "{original}\n\n"
+            "【我的翻譯（中間語言）】\n"
+            "{intermediate}\n\n"
+            "【我翻回來的句子】\n"
+            "{user_trans}"
+        )
+
+    def edit_compare_prompt(self):
+        prompt_key = "Trans_Compare"
+        template = self.db.get_prompt(prompt_key)
+        if not template:
+            template = self.get_default_compare_prompt()
+            
+        editor = tk.Toplevel(self)
+        editor.title("編輯對比範本 (Edit Comparison Prompt)")
+        editor.geometry("700x500")
+        
+        info_text = (
+            "可用變數 (請保留大括號 {}):\n"
+            "{original} = 原文 (L2)\n"
+            "{intermediate} = 您的母語翻譯 (L1)\n"
+            "{user_trans} = 您翻回來的句子"
+        )
+        ttk.Label(editor, text=info_text, justify="left").pack(pady=5, padx=10, anchor="w")
+        
+        text_area = tk.Text(editor, wrap="word", height=20)
+        text_area.pack(fill="both", expand=True, padx=10, pady=5)
+        text_area.insert("1.0", template)
+        
+        btn_frame = ttk.Frame(editor)
+        btn_frame.pack(pady=10)
+        
+        def save():
+            new_template = text_area.get("1.0", tk.END).strip()
+            self.db.save_prompt(prompt_key, new_template)
+            messagebox.showinfo("成功", "已儲存對比範本！")
+            editor.destroy()
+            
+        def reset():
+            if messagebox.askyesno("確認", "確定要還原成預設範本嗎？(此動作無法復原)"):
+                self.db.delete_prompt(prompt_key)
+                text_area.delete("1.0", tk.END)
+                text_area.insert("1.0", self.get_default_compare_prompt())
+                messagebox.showinfo("成功", "已還原預設範本！")
+                
+        ttk.Button(btn_frame, text="儲存 (Save)", command=save).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="還原預設 (Reset)", command=reset).pack(side="left", padx=5)
 
     def add_translation(self):
         l2_text = self.l2_text_input.get("1.0", tk.END).strip()
@@ -178,24 +243,19 @@ class TranslationTab(ttk.Frame):
         self.recently_compared_ids.add(trans_id)
         self._save_recently_compared()
 
-        msg = (
-            "這是一個「雙向翻譯」練習：我先把原文翻譯成母語，幾天後再翻回原文。\n\n"
-            "目的是找出我「能理解但無法正確表達」的地方，以及語言能力的落差。\n\n"
-            "請幫我分析我的翻譯過程：\n\n"
-            "1. 比較原文與我翻回來的句子\n"
-            "2. 指出錯誤與不自然之處\n"
-            "3. 分析這些錯誤是否來自「中間翻譯」\n"
-            "4. 告訴我哪些是母語干擾造成的\n"
-            "5. 提供最接近原文的正確版本\n"
-            "6. 教我應該怎麼避免這類錯誤\n"
-            "7. 請幫我分類這些錯誤（例如：搭配錯誤 / 文法錯誤 / 語氣問題 / 母語直譯）\n\n\n"
-            "【原文】\n"
-            f"{l2_text_original}\n\n"
-            "【我的翻譯（中間語言）】\n"
-            f"{l1_text_intermediate}\n\n"
-            "【我翻回來的句子】\n"
-            f"{l2_text_user}"
-        )
+        template = self.db.get_prompt("Trans_Compare")
+        if not template:
+            template = self.get_default_compare_prompt()
+            
+        try:
+            msg = template.format(
+                original=l2_text_original,
+                intermediate=l1_text_intermediate,
+                user_trans=l2_text_user
+            )
+        except Exception as e:
+            messagebox.showerror("範本錯誤", f"自訂對比範本變數格式有誤：\n{str(e)}\n請點擊「編輯對比範本」檢查變數括號 {{}}。")
+            return
 
         # We can use a Toplevel window for better reading
         top = tk.Toplevel(self)

@@ -95,12 +95,6 @@ class TranslationTab(ttk.Frame):
         
         self.copy_status_label = ttk.Label(btn_frame_1, text="", foreground="green")
         self.copy_status_label.pack(side="left", padx=10)
-        
-        btn_frame_edit = ttk.Frame(right_frame)
-        btn_frame_edit.pack(fill="x", pady=2)
-        ttk.Button(btn_frame_edit, text="編輯對比範本", command=lambda: self.edit_prompt("Trans_Compare")).pack(side="left", padx=2)
-        ttk.Button(btn_frame_edit, text="編輯教材範本", command=lambda: self.edit_prompt("Trans_Material")).pack(side="left", padx=2)
-        ttk.Button(btn_frame_edit, text="編輯分數範本", command=lambda: self.edit_prompt("Trans_Score")).pack(side="left", padx=2)
 
         btn_frame_2 = ttk.Frame(right_frame)
         btn_frame_2.pack(fill="x", pady=2)
@@ -133,56 +127,6 @@ class TranslationTab(ttk.Frame):
 
     def get_default_score_prompt(self):
         return "0~200分幫我打分數， 100分是完全英文母語人士水準，200分是英文文學教授、作家等級。 60分是英文及格。 請詳細分析，計算分數"
-
-    def edit_prompt(self, prompt_key):
-        template = self.db.get_prompt(prompt_key)
-        if not template:
-            if prompt_key == "Trans_Compare":
-                template = self.get_default_compare_prompt()
-            elif prompt_key == "Trans_Material":
-                template = self.get_default_material_prompt()
-            elif prompt_key == "Trans_Score":
-                template = self.get_default_score_prompt()
-            
-        editor = tk.Toplevel(self)
-        editor.title(f"編輯範本 ({prompt_key})")
-        editor.geometry("700x500")
-        
-        info_text = (
-            "可用變數 (請保留大括號 {}):\n"
-            "{original} = 原文 (L2)\n"
-            "{intermediate} = 您的母語翻譯 (L1)\n"
-            "{user_trans} = 您翻回來的句子"
-        )
-        ttk.Label(editor, text=info_text, justify="left").pack(pady=5, padx=10, anchor="w")
-        
-        text_area = tk.Text(editor, wrap="word", height=20)
-        text_area.pack(fill="both", expand=True, padx=10, pady=5)
-        text_area.insert("1.0", template)
-        
-        btn_frame = ttk.Frame(editor)
-        btn_frame.pack(pady=10)
-        
-        def save():
-            new_template = text_area.get("1.0", tk.END).strip()
-            self.db.save_prompt(prompt_key, new_template)
-            messagebox.showinfo("成功", "已儲存範本！")
-            editor.destroy()
-            
-        def reset():
-            if messagebox.askyesno("確認", "確定要還原成預設範本嗎？(此動作無法復原)"):
-                self.db.delete_prompt(prompt_key)
-                text_area.delete("1.0", tk.END)
-                if prompt_key == "Trans_Compare":
-                    text_area.insert("1.0", self.get_default_compare_prompt())
-                elif prompt_key == "Trans_Material":
-                    text_area.insert("1.0", self.get_default_material_prompt())
-                elif prompt_key == "Trans_Score":
-                    text_area.insert("1.0", self.get_default_score_prompt())
-                messagebox.showinfo("成功", "已還原預設範本！")
-                
-        ttk.Button(btn_frame, text="儲存 (Save)", command=save).pack(side="left", padx=5)
-        ttk.Button(btn_frame, text="還原預設 (Reset)", command=reset).pack(side="left", padx=5)
 
     def add_translation(self):
         l2_text = self.l2_text_input.get("1.0", tk.END).strip()

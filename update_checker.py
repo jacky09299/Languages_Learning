@@ -78,14 +78,26 @@ def download_and_update(app, download_url):
 
 def apply_update(app, exe_dir, current_exe_name, new_exe_name):
     bat_content = f"""@echo off
+setlocal enabledelayedexpansion
 timeout /t 2 /nobreak >nul
-:loop
+:wait_process
 tasklist | find /i "{current_exe_name}" >nul
 if not errorlevel 1 (
     timeout /t 1 /nobreak >nul
-    goto loop
+    goto wait_process
 )
-del "{current_exe_name}"
+
+set retry=0
+:delete_loop
+del /f /q "{current_exe_name}"
+if exist "{current_exe_name}" (
+    set /a retry+=1
+    if !retry! lss 10 (
+        timeout /t 1 /nobreak >nul
+        goto delete_loop
+    )
+)
+
 ren "{new_exe_name}" "{current_exe_name}"
 start "" "{current_exe_name}"
 del "%~f0"

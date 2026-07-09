@@ -78,8 +78,6 @@ def download_and_update(app, download_url):
 
 def apply_update(app, exe_dir, current_exe_name, new_exe_name):
     bat_content = f"""@echo off
-chcp 65001 >nul
-echo 正在套用更新... 請稍候...
 timeout /t 2 /nobreak >nul
 :loop
 tasklist | find /i "{current_exe_name}" >nul
@@ -93,7 +91,7 @@ start "" "{current_exe_name}"
 del "%~f0"
 """
     bat_path = os.path.join(exe_dir, "update_app.bat")
-    with open(bat_path, "w", encoding="utf-8") as f:
+    with open(bat_path, "w", encoding="utf-8-sig") as f:
         f.write(bat_content)
     
     app.withdraw()  # Hide main window immediately

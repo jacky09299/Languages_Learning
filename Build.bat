@@ -5,7 +5,16 @@ setlocal
 echo ==========================================
 echo    Language Learning 軟體一鍵打包腳本
 echo ==========================================
+echo.
+set /p VERSION=請輸入要打包的新版本號 (例如 v1.0.1，或直接按 Enter 跳過修改直接打包): 
 
+if not "%VERSION%"=="" (
+    echo.
+    echo 正在更新 update_checker.py 中的版本號為 %VERSION% ...
+    python -c "import re, sys; f=open('update_checker.py','r',encoding='utf-8'); c=f.read(); f.close(); c=re.sub(r'CURRENT_VERSION\s*=\s*\".*?\"', f'CURRENT_VERSION = \"{sys.argv[1]}\"', c); f=open('update_checker.py','w',encoding='utf-8'); f.write(c); f.close()" %VERSION%
+)
+
+echo.
 echo [1/3] 使用 PyInstaller 打包 EXE (這可能需要幾分鐘的時間)...
 if exist app_icon.png (
     echo 發現 app_icon.png，正在自動轉換為 ico 格式...

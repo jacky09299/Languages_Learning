@@ -88,15 +88,25 @@ class TranslationTab(ttk.Frame):
 
         btn_frame_1 = ttk.Frame(right_frame)
         btn_frame_1.pack(fill="x", pady=5)
-        ttk.Button(btn_frame_1, text="對比原文 (Compare)", command=self.compare_translation).pack(side="left", padx=5)
-        ttk.Button(btn_frame_1, text="編輯對比範本 (Edit Prompt)", command=self.edit_compare_prompt).pack(side="left", padx=5)
-        ttk.Button(btn_frame_1, text="標記完成 (Mark Completed)", command=self.complete_translation).pack(side="left", padx=5)
+        ttk.Button(btn_frame_1, text="對比原文", command=lambda: self.generate_prompt_output("Trans_Compare")).pack(side="left", padx=2)
+        ttk.Button(btn_frame_1, text="教材Prompt", command=lambda: self.generate_prompt_output("Trans_Material")).pack(side="left", padx=2)
+        ttk.Button(btn_frame_1, text="打分數Prompt", command=lambda: self.generate_prompt_output("Trans_Score")).pack(side="left", padx=2)
+        ttk.Button(btn_frame_1, text="標記完成", command=self.complete_translation).pack(side="left", padx=2)
         
+        self.copy_status_label = ttk.Label(btn_frame_1, text="", foreground="green")
+        self.copy_status_label.pack(side="left", padx=10)
+        
+        btn_frame_edit = ttk.Frame(right_frame)
+        btn_frame_edit.pack(fill="x", pady=2)
+        ttk.Button(btn_frame_edit, text="編輯對比範本", command=lambda: self.edit_prompt("Trans_Compare")).pack(side="left", padx=2)
+        ttk.Button(btn_frame_edit, text="編輯教材範本", command=lambda: self.edit_prompt("Trans_Material")).pack(side="left", padx=2)
+        ttk.Button(btn_frame_edit, text="編輯分數範本", command=lambda: self.edit_prompt("Trans_Score")).pack(side="left", padx=2)
+
         btn_frame_2 = ttk.Frame(right_frame)
         btn_frame_2.pack(fill="x", pady=2)
-        ttk.Button(btn_frame_2, text="上傳教材 PDF (Upload PDF)", command=self.upload_material_pdf).pack(side="left", padx=5)
-        ttk.Button(btn_frame_2, text="查看教材 (View Materials)", command=self.view_materials).pack(side="left", padx=5)
-        ttk.Button(btn_frame_2, text="顯示分數曲線 (Score Curve)", command=self.show_score_curve).pack(side="left", padx=5)
+        ttk.Button(btn_frame_2, text="上傳教材 PDF", command=self.upload_material_pdf).pack(side="left", padx=2)
+        ttk.Button(btn_frame_2, text="查看教材", command=self.view_materials).pack(side="left", padx=2)
+        ttk.Button(btn_frame_2, text="顯示分數曲線", command=self.show_score_curve).pack(side="left", padx=2)
 
     def get_default_compare_prompt(self):
         return (
@@ -118,14 +128,24 @@ class TranslationTab(ttk.Frame):
             "{user_trans}"
         )
 
-    def edit_compare_prompt(self):
-        prompt_key = "Trans_Compare"
+    def get_default_material_prompt(self):
+        return "整理目前我的程度，寫成完整的docx教材。 必須要我一年後還知道內容再講甚麼，所以不能以為我還記得就省略"
+
+    def get_default_score_prompt(self):
+        return "0~200分幫我打分數， 100分是完全英文母語人士水準，200分是英文文學教授、作家等級。 60分是英文及格。 請詳細分析，計算分數"
+
+    def edit_prompt(self, prompt_key):
         template = self.db.get_prompt(prompt_key)
         if not template:
-            template = self.get_default_compare_prompt()
+            if prompt_key == "Trans_Compare":
+                template = self.get_default_compare_prompt()
+            elif prompt_key == "Trans_Material":
+                template = self.get_default_material_prompt()
+            elif prompt_key == "Trans_Score":
+                template = self.get_default_score_prompt()
             
         editor = tk.Toplevel(self)
-        editor.title("編輯對比範本 (Edit Comparison Prompt)")
+        editor.title(f"編輯範本 ({prompt_key})")
         editor.geometry("700x500")
         
         info_text = (
@@ -146,14 +166,19 @@ class TranslationTab(ttk.Frame):
         def save():
             new_template = text_area.get("1.0", tk.END).strip()
             self.db.save_prompt(prompt_key, new_template)
-            messagebox.showinfo("成功", "已儲存對比範本！")
+            messagebox.showinfo("成功", "已儲存範本！")
             editor.destroy()
             
         def reset():
             if messagebox.askyesno("確認", "確定要還原成預設範本嗎？(此動作無法復原)"):
                 self.db.delete_prompt(prompt_key)
                 text_area.delete("1.0", tk.END)
-                text_area.insert("1.0", self.get_default_compare_prompt())
+                if prompt_key == "Trans_Compare":
+                    text_area.insert("1.0", self.get_default_compare_prompt())
+                elif prompt_key == "Trans_Material":
+                    text_area.insert("1.0", self.get_default_material_prompt())
+                elif prompt_key == "Trans_Score":
+                    text_area.insert("1.0", self.get_default_score_prompt())
                 messagebox.showinfo("成功", "已還原預設範本！")
                 
         ttk.Button(btn_frame, text="儲存 (Save)", command=save).pack(side="left", padx=5)
@@ -256,51 +281,53 @@ class TranslationTab(ttk.Frame):
             self.trans_back_input.insert("1.0", user_trans)
 
     def compare_translation(self):
-        selection = self.trans_listbox.curselection()
-        if not selection:
-            messagebox.showwarning("警告", "請選擇項目 (Select an item)")
-            return
+        # Backward compatibility
+        self.generate_prompt_output("Trans_Compare")
 
-        idx = selection[0]
-        trans_id = self.ready_trans[idx][0]
-        l1_text_intermediate = self.ready_trans[idx][1]
-        l2_text_original = self.ready_trans[idx][2]
-        l2_text_user = self.trans_back_input.get("1.0", tk.END).strip()
-
-        if l2_text_user:
-            self.db.update_user_translation_manual(trans_id, l2_text_user)
-
-        self.recently_compared_ids.add(trans_id)
-        self._save_recently_compared()
-
-        template = self.db.get_prompt("Trans_Compare")
+    def generate_prompt_output(self, prompt_key):
+        template = self.db.get_prompt(prompt_key)
         if not template:
-            template = self.get_default_compare_prompt()
-            
-        try:
-            msg = template.format(
-                original=l2_text_original,
-                intermediate=l1_text_intermediate,
-                user_trans=l2_text_user
-            )
-        except Exception as e:
-            messagebox.showerror("範本錯誤", f"自訂對比範本變數格式有誤：\n{str(e)}\n請點擊「編輯對比範本」檢查變數括號 {{}}。")
-            return
+            if prompt_key == "Trans_Compare":
+                template = self.get_default_compare_prompt()
+            elif prompt_key == "Trans_Material":
+                template = self.get_default_material_prompt()
+            elif prompt_key == "Trans_Score":
+                template = self.get_default_score_prompt()
 
-        # We can use a Toplevel window for better reading
-        top = tk.Toplevel(self)
-        top.title("對比結果 (Comparison)")
-        text = tk.Text(top, height=30, width=90)
-        text.pack(padx=10, pady=(10, 5))
-        text.insert("1.0", msg)
-        text.config(state="disabled")
+        if prompt_key == "Trans_Compare" or "{original}" in template or "{user_trans}" in template or "{intermediate}" in template:
+            selection = self.trans_listbox.curselection()
+            if not selection:
+                messagebox.showwarning("警告", "這段 Prompt 需要帶入句子，請先在列表中選擇一個項目 (Select an item)")
+                return
 
-        def copy_to_clipboard():
-            top.clipboard_clear()
-            top.clipboard_append(msg)
-            top.destroy()
+            idx = selection[0]
+            trans_id = self.ready_trans[idx][0]
+            l1_text_intermediate = self.ready_trans[idx][1]
+            l2_text_original = self.ready_trans[idx][2]
+            l2_text_user = self.trans_back_input.get("1.0", tk.END).strip()
 
-        ttk.Button(top, text="複製全部 (Copy All)", command=copy_to_clipboard).pack(pady=(0, 10))
+            if l2_text_user:
+                self.db.update_user_translation_manual(trans_id, l2_text_user)
+
+            self.recently_compared_ids.add(trans_id)
+            self._save_recently_compared()
+
+            try:
+                msg = template.format(
+                    original=l2_text_original,
+                    intermediate=l1_text_intermediate,
+                    user_trans=l2_text_user
+                )
+            except Exception as e:
+                messagebox.showerror("範本錯誤", f"自訂範本變數格式有誤：\n{str(e)}\n請點擊對應的「編輯範本」按鈕檢查變數括號 {{}}。")
+                return
+        else:
+            msg = template
+
+        self.clipboard_clear()
+        self.clipboard_append(msg)
+        self.copy_status_label.config(text="✅ 已複製！")
+        self.after(2000, lambda: self.copy_status_label.config(text=""))
 
     def complete_translation(self):
         selection = self.trans_listbox.curselection()

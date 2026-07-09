@@ -107,3 +107,29 @@ del "%~f0"
     else:
         app.destroy()
         sys.exit(0)
+
+def manual_check(app):
+    def _check():
+        try:
+            req = urllib.request.Request(REPO_URL, headers={'User-Agent': 'Mozilla/5.0 LanguageLearningApp'})
+            with urllib.request.urlopen(req, timeout=5) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                latest_version = data.get("tag_name", "")
+                
+                if latest_version and latest_version != CURRENT_VERSION:
+                    download_url = None
+                    for asset in data.get("assets", []):
+                        if asset.get("name") == "Language_Learning.exe":
+                            download_url = asset.get("browser_download_url")
+                            break
+                    
+                    if download_url:
+                        app.after(0, lambda: prompt_update(app, latest_version, download_url))
+                    else:
+                        app.after(0, lambda: messagebox.showinfo("檢查更新", "發現新版本，但尚未上傳安裝檔！"))
+                else:
+                    app.after(0, lambda: messagebox.showinfo("檢查更新", f"目前已是最新版本 ({CURRENT_VERSION})！"))
+        except Exception as e:
+            app.after(0, lambda: messagebox.showerror("檢查更新失敗", f"無法連線檢查更新：\n{e}"))
+
+    threading.Thread(target=_check, daemon=True).start()

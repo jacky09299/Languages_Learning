@@ -16,16 +16,19 @@ class SettingsTab(ttk.Frame):
         self.tab_srs = ttk.Frame(self.notebook)
         self.tab_config = ttk.Frame(self.notebook)
         self.tab_tutorial = ttk.Frame(self.notebook)
+        self.tab_about = ttk.Frame(self.notebook)
         
         self.notebook.add(self.tab_ai, text="AI 產生與匯入")
         self.notebook.add(self.tab_srs, text="學習與複習機制")
         self.notebook.add(self.tab_config, text="系統設定檔 (Config)")
         self.notebook.add(self.tab_tutorial, text="軟體教學")
+        self.notebook.add(self.tab_about, text="關於系統")
         
         self.create_ai_ui(self.tab_ai)
         self.create_srs_ui(self.tab_srs)
         self.create_config_ui(self.tab_config)
         self.create_tutorial_ui(self.tab_tutorial)
+        self.create_about_ui(self.tab_about)
 
     # -----------------------------
     # 1. AI 產生與匯入 (Original UI)
@@ -454,6 +457,18 @@ class SettingsTab(ttk.Frame):
         text_widget.pack(fill="both", expand=True, padx=20, pady=10)
         text_widget.insert(1.0, tutorial_text.strip())
         text_widget.config(state="disabled") # Make it read-only
+
+    def create_about_ui(self, parent_frame):
+        import update_checker
+        
+        # Center content
+        center_frame = ttk.Frame(parent_frame)
+        center_frame.pack(expand=True)
+        
+        ttk.Label(center_frame, text="多國語言學習系統", font=("Helvetica", 16, "bold")).pack(pady=(0, 5))
+        ttk.Label(center_frame, text=f"目前版本: {update_checker.CURRENT_VERSION}", font=("Helvetica", 12)).pack(pady=(0, 20))
+        
+        ttk.Button(center_frame, text="檢查更新", command=lambda: update_checker.manual_check(self.app)).pack(pady=10)
 
     def refresh_data(self):
         pass

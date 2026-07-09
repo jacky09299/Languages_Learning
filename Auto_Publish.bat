@@ -23,17 +23,12 @@ git push origin %VERSION%
 git push
 
 echo.
-echo [2/2] 開啟 GitHub Release 頁面 ...
-start https://github.com/jacky09299/Languages_Learning/releases/new?tag=%VERSION%
+echo [2/2] 建立 GitHub Release 並自動上傳檔案 ...
+gh release create %VERSION% Release_Package\Language_Learning.exe --title "%VERSION%" --notes "自動發布版本 %VERSION%"
 
 echo ==========================================
 echo.
-echo 發布前準備已完成！
-echo 請在彈出的網頁中完成最後步驟：
-echo 1. 確認標籤 (tag) 為 %VERSION%。
-echo 2. 將您用 Build.bat 打包好的 Language_Learning.exe 拖曳上傳至網頁中的 Attach binaries 區塊。
-echo 3. 點擊綠色的 "Publish release" 按鈕。
-echo.
-echo 完成後，舊版軟體的使用者就會在下次打開時收到更新通知了！
+echo 發布已全自動完成！
+echo 您已成功建立 Release 並上傳最新安裝檔，使用者將在下次開啟時收到更新通知。
 echo ==========================================
 pause

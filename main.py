@@ -15,6 +15,7 @@ from sheet_fetcher import fetch_and_sync_answers
 from db_viewer import DatabaseViewer
 import sys
 import os
+import update_checker
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -127,6 +128,9 @@ class LanguageLearningApp(tk.Tk):
         self.scheduler_running = True
         self.schedule_thread = threading.Thread(target=self.run_scheduler, daemon=True)
         self.schedule_thread.start()
+        
+        # Check for updates in the background
+        update_checker.check_for_updates(self)
         
         # Force a data refresh shortly after the main loop starts to ensure all UI elements render correctly
         self.after(500, self.on_language_change)

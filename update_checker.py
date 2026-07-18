@@ -8,7 +8,7 @@ import sys
 import subprocess
 
 REPO_URL = "https://api.github.com/repos/jacky09299/Languages_Learning/releases/latest"
-CURRENT_VERSION = "v1.0.0"
+CURRENT_VERSION = "v1.0.1"
 
 def check_for_updates(app):
     # Only run update check if it's running as a frozen executable (packaged by PyInstaller)
@@ -78,22 +78,32 @@ def download_and_update(app, download_url):
 
 def apply_update(app, exe_dir, current_exe_name, new_exe_name):
     bat_content = f"""@echo off
-chcp 65001 >nul
-echo 正在套用更新... 請稍候...
+setlocal enabledelayedexpansion
 timeout /t 2 /nobreak >nul
-:loop
+:wait_process
 tasklist | find /i "{current_exe_name}" >nul
 if not errorlevel 1 (
     timeout /t 1 /nobreak >nul
-    goto loop
+    goto wait_process
 )
-del "{current_exe_name}"
+
+set retry=0
+:delete_loop
+del /f /q "{current_exe_name}"
+if exist "{current_exe_name}" (
+    set /a retry+=1
+    if !retry! lss 10 (
+        timeout /t 1 /nobreak >nul
+        goto delete_loop
+    )
+)
+
 ren "{new_exe_name}" "{current_exe_name}"
 start "" "{current_exe_name}"
 del "%~f0"
 """
     bat_path = os.path.join(exe_dir, "update_app.bat")
-    with open(bat_path, "w", encoding="utf-8") as f:
+    with open(bat_path, "w", encoding="utf-8-sig") as f:
         f.write(bat_content)
     
     app.withdraw()  # Hide main window immediately

@@ -14,18 +14,21 @@ class SettingsTab(ttk.Frame):
         
         self.tab_ai = ttk.Frame(self.notebook)
         self.tab_srs = ttk.Frame(self.notebook)
+        self.tab_prompt = ttk.Frame(self.notebook)
         self.tab_config = ttk.Frame(self.notebook)
         self.tab_tutorial = ttk.Frame(self.notebook)
         self.tab_about = ttk.Frame(self.notebook)
         
         self.notebook.add(self.tab_ai, text="AI 產生與匯入")
         self.notebook.add(self.tab_srs, text="學習與複習機制")
+        self.notebook.add(self.tab_prompt, text="Prompt 範本設定")
         self.notebook.add(self.tab_config, text="系統設定檔 (Config)")
         self.notebook.add(self.tab_tutorial, text="軟體教學")
         self.notebook.add(self.tab_about, text="關於系統")
         
         self.create_ai_ui(self.tab_ai)
         self.create_srs_ui(self.tab_srs)
+        self.create_prompt_ui(self.tab_prompt)
         self.create_config_ui(self.tab_config)
         self.create_tutorial_ui(self.tab_tutorial)
         self.create_about_ui(self.tab_about)
@@ -86,7 +89,6 @@ class SettingsTab(ttk.Frame):
         btn_frame = ttk.Frame(prompt_frame)
         btn_frame.pack(pady=5)
         ttk.Button(btn_frame, text="複製 Prompt", command=self.copy_prompt).pack(side="left", padx=5)
-        ttk.Button(btn_frame, text="編輯目前範本", command=self.open_template_editor).pack(side="left", padx=5)
 
         # Import JSON
         import_frame = ttk.LabelFrame(scrollable_frame, text="匯入 AI 生成結果 (Import AI Output)")
@@ -148,8 +150,7 @@ class SettingsTab(ttk.Frame):
         except Exception as e:
             messagebox.showerror("範本錯誤", f"自訂範本格式有誤：\n{str(e)}")
 
-    def open_template_editor(self):
-        prompt_key = "JSON" if self.format_var.get() == "JSON" else ("DB_story" if self.type_var.get() == "小故事" else "DB_joke")
+    def open_specific_template_editor(self, prompt_key):
         template = self.db.get_prompt(prompt_key) or self.get_default_template(prompt_key)
             
         editor = tk.Toplevel(self)
@@ -168,7 +169,6 @@ class SettingsTab(ttk.Frame):
             self.db.save_prompt(prompt_key, text_area.get("1.0", tk.END).strip())
             messagebox.showinfo("成功", "已儲存！")
             editor.destroy()
-            self.generate_prompt()
             
         def reset():
             if messagebox.askyesno("確認", "確定要還原成預設範本嗎？"):
@@ -277,6 +277,109 @@ class SettingsTab(ttk.Frame):
             messagebox.showinfo("成功", "學習複習設定已成功儲存至資料庫！")
         except Exception as e:
             messagebox.showerror("錯誤", f"儲存失敗：{str(e)}")
+
+    # -----------------------------
+    # 2.5 Prompt 範本設定
+    # -----------------------------
+    def create_prompt_ui(self, parent_frame):
+        ttk.Label(parent_frame, text="雙向翻譯 Prompt 範本設定", font=("Helvetica", 14, "bold")).pack(pady=15, padx=10, anchor="w")
+        ttk.Label(parent_frame, text="設定在雙向翻譯功能中，點擊按鈕時自動複製給 AI 的預設對話內容。").pack(padx=10, pady=(0, 10), anchor="w")
+        
+        btn_frame = ttk.Frame(parent_frame)
+        btn_frame.pack(fill="x", padx=10, pady=5)
+        
+        ttk.Button(btn_frame, text="編輯對比範本 (Trans_Compare)", command=lambda: self.edit_trans_prompt("Trans_Compare")).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="編輯教材範本 (Trans_Material)", command=lambda: self.edit_trans_prompt("Trans_Material")).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="編輯分數範本 (Trans_Score)", command=lambda: self.edit_trans_prompt("Trans_Score")).pack(side="left", padx=5)
+
+        ttk.Separator(parent_frame, orient="horizontal").pack(fill="x", padx=10, pady=15)
+
+        ttk.Label(parent_frame, text="AI 產生器 Prompt 範本設定", font=("Helvetica", 14, "bold")).pack(pady=(0, 15), padx=10, anchor="w")
+        ttk.Label(parent_frame, text="設定在「AI 產生與匯入」功能中，向 AI 請求大量資料時的產生器範本。").pack(padx=10, pady=(0, 10), anchor="w")
+        
+        ai_btn_frame = ttk.Frame(parent_frame)
+        ai_btn_frame.pack(fill="x", padx=10, pady=5)
+        
+        ttk.Button(ai_btn_frame, text="編輯 JSON 範本", command=lambda: self.open_specific_template_editor("JSON")).pack(side="left", padx=5)
+        ttk.Button(ai_btn_frame, text="編輯小故事範本 (DB_story)", command=lambda: self.open_specific_template_editor("DB_story")).pack(side="left", padx=5)
+        ttk.Button(ai_btn_frame, text="編輯笑話範本 (DB_joke)", command=lambda: self.open_specific_template_editor("DB_joke")).pack(side="left", padx=5)
+
+    def edit_trans_prompt(self, prompt_key):
+        template = self.db.get_prompt(prompt_key)
+        if not template:
+            if prompt_key == "Trans_Compare":
+                template = self.get_default_compare_prompt()
+            elif prompt_key == "Trans_Material":
+                template = self.get_default_material_prompt()
+            elif prompt_key == "Trans_Score":
+                template = self.get_default_score_prompt()
+            
+        editor = tk.Toplevel(self)
+        editor.title(f"編輯範本 ({prompt_key})")
+        editor.geometry("700x500")
+        
+        info_text = (
+            "可用變數 (請保留大括號 {}):\n"
+            "{original} = 原文 (L2)\n"
+            "{intermediate} = 您的母語翻譯 (L1)\n"
+            "{user_trans} = 您翻回來的句子\n\n"
+            "※ 若您的範本不需要帶入句子，只需純文字即可，不需寫上變數。"
+        )
+        ttk.Label(editor, text=info_text, justify="left").pack(pady=5, padx=10, anchor="w")
+        
+        text_area = tk.Text(editor, wrap="word", height=20)
+        text_area.pack(fill="both", expand=True, padx=10, pady=5)
+        text_area.insert("1.0", template)
+        
+        btn_frame = ttk.Frame(editor)
+        btn_frame.pack(pady=10)
+        
+        def save():
+            new_template = text_area.get("1.0", tk.END).strip()
+            self.db.save_prompt(prompt_key, new_template)
+            messagebox.showinfo("成功", "已儲存範本！")
+            editor.destroy()
+            
+        def reset():
+            if messagebox.askyesno("確認", "確定要還原成預設範本嗎？(此動作無法復原)"):
+                self.db.delete_prompt(prompt_key)
+                text_area.delete("1.0", tk.END)
+                if prompt_key == "Trans_Compare":
+                    text_area.insert("1.0", self.get_default_compare_prompt())
+                elif prompt_key == "Trans_Material":
+                    text_area.insert("1.0", self.get_default_material_prompt())
+                elif prompt_key == "Trans_Score":
+                    text_area.insert("1.0", self.get_default_score_prompt())
+                messagebox.showinfo("成功", "已還原預設範本！")
+                
+        ttk.Button(btn_frame, text="儲存 (Save)", command=save).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="還原預設 (Reset)", command=reset).pack(side="left", padx=5)
+
+    def get_default_compare_prompt(self):
+        return (
+            "這是一個「雙向翻譯」練習：我先把原文翻譯成母語，幾天後再翻回原文。\n\n"
+            "目的是找出我「能理解但無法正確表達」的地方，以及語言能力的落差。\n\n"
+            "請幫我分析我的翻譯過程：\n\n"
+            "1. 比較原文與我翻回來的句子\n"
+            "2. 指出錯誤與不自然之處\n"
+            "3. 分析這些錯誤是否來自「中間翻譯」\n"
+            "4. 告訴我哪些是母語干擾造成的\n"
+            "5. 提供最接近原文的正確版本\n"
+            "6. 教我應該怎麼避免這類錯誤\n"
+            "7. 請幫我分類這些錯誤（例如：搭配錯誤 / 文法錯誤 / 語氣問題 / 母語直譯）\n\n\n"
+            "【原文】\n"
+            "{original}\n\n"
+            "【我的翻譯（中間語言）】\n"
+            "{intermediate}\n\n"
+            "【我翻回來的句子】\n"
+            "{user_trans}"
+        )
+
+    def get_default_material_prompt(self):
+        return "整理目前我的程度，寫成完整的docx教材。 必須要我一年後還知道內容再講甚麼，所以不能以為我還記得就省略"
+
+    def get_default_score_prompt(self):
+        return "0~200分幫我打分數， 100分是完全英文母語人士水準，200分是英文文學教授、作家等級。 60分是英文及格。 請詳細分析，計算分數"
 
     # -----------------------------
     # 3. 系統設定 (Config JSON Editor)

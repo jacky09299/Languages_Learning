@@ -8,7 +8,7 @@ import sys
 import subprocess
 
 REPO_URL = "https://api.github.com/repos/jacky09299/Languages_Learning/releases/latest"
-CURRENT_VERSION = "v1.0.1"
+CURRENT_VERSION = "v1.0.2"
 
 def check_for_updates(app):
     # Only run update check if it's running as a frozen executable (packaged by PyInstaller)

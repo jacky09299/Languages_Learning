@@ -305,7 +305,7 @@ class TranslationTab(ttk.Frame):
         if not file_path:
             return
 
-        score = simpledialog.askinteger("輸入分數 (Score)", "請為這次對比練習輸入分數 (例如: 0~100)\n取消則預設為 0 分:", minvalue=0, maxvalue=100)
+        score = simpledialog.askfloat("輸入分數 (Score)", "請為這次對比練習輸入分數 (例如: 0~200)\n取消則預設為 0 分:", minvalue=0.0, maxvalue=200.0)
         if score is None:
              score = 0
 

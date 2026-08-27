@@ -280,7 +280,15 @@ class TranslationTab(ttk.Frame):
         idx = selection[0]
         trans_id = self.ready_trans[idx][0]
 
+        # 先儲存使用者當前輸入的翻譯
+        current_text = self.trans_back_input.get("1.0", tk.END).strip()
+        if current_text:
+            self.db.update_user_translation_manual(trans_id, current_text)
+
         self.db.complete_translation(trans_id)
+        
+        # 清除索引，避免 load_translations 再次儲存清空後的空白字串
+        self.current_trans_idx = None
         self.trans_back_input.delete("1.0", tk.END)
         self.load_translations()
 
